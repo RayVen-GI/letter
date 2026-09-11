@@ -1,0 +1,687 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тебе письмо! ❤️</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 18px;
+            background: linear-gradient(135deg, #ffe5ec, #ffc2d1);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+
+        /* Контейнер фоновых сердечек — на весь экран, клики сквозь него */
+        #hearts-container {
+            position: fixed;
+            inset: 0;
+            overflow: hidden;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .wrapper {
+            position: relative;
+            cursor: pointer;
+            z-index: 10;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        /* Лёгкое покачивание чтобы было видно что кликабельно */
+        .wrapper:not(.open) .envelope { animation: wiggle 2.5s ease-in-out infinite; }
+        @keyframes wiggle {
+            0%, 100% { transform: rotate(0deg); }
+            92% { transform: rotate(0deg); }
+            94% { transform: rotate(-2deg); }
+            96% { transform: rotate(2deg); }
+            98% { transform: rotate(0deg); }
+        }
+
+        .envelope {
+            position: relative;
+            width: 300px;
+            height: 200px;
+            background-color: #ff85a1;
+            border-bottom-left-radius: 10px;
+            border-bottom-right-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            transition: transform 0.5s ease;
+        }
+        .envelope::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0;
+            width: 0; height: 0;
+            border-left: 150px solid transparent;
+            border-right: 150px solid transparent;
+            border-top: 110px solid #ff758f;
+            transform-origin: top;
+            transition: transform 0.4s ease 0.2s;
+            z-index: 3;
+        }
+        .envelope::after {
+            content: '';
+            position: absolute;
+            bottom: 0; left: 0;
+            width: 0; height: 0;
+            border-left: 150px solid #ff94b4;
+            border-right: 150px solid #ff94b4;
+            border-top: 100px solid transparent;
+            border-bottom: 100px solid #ff94b4;
+            border-radius: 0 0 10px 10px;
+            z-index: 2;
+        }
+
+        /* Маленькая закрытая бумажка: вылезает из конверта первой */
+        #mini {
+            position: absolute;
+            bottom: 10px;
+            left: 90px;
+            width: 120px;
+            height: 84px;
+            background: #fff;
+            border: 2px dashed #ffb3c1;
+            border-radius: 6px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.15);
+            z-index: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 30px;
+            opacity: 0;
+            transform: translateY(30px) rotate(-5deg);
+            transition: transform 0.45s ease, opacity 0.3s ease;
+            pointer-events: none;
+        }
+        .wrapper.open #mini {
+            transform: translateY(-115px) rotate(4deg);
+            opacity: 1;
+        }
+        /* Когда большой лист раскрылся — бумажка растворяется */
+        body.expanded #mini {
+            transform: translateY(-170px) rotate(10deg) scale(0.5);
+            opacity: 0;
+        }
+
+        .heart-lock {
+            position: absolute;
+            top: 90px; left: 135px;
+            width: 30px; height: 30px;
+            background-color: #e63946;
+            transform: rotate(-45deg);
+            z-index: 4;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+        .heart-lock::before, .heart-lock::after {
+            content: '';
+            position: absolute;
+            width: 30px; height: 30px;
+            background-color: #e63946;
+            border-radius: 50%;
+        }
+        .heart-lock::before { top: -15px; left: 0; }
+        .heart-lock::after { left: -15px; top: 0; }
+
+        .wrapper.open .envelope::before { transform: rotateX(180deg); z-index: 0; }
+        .wrapper.open .heart-lock { opacity: 0; transform: rotate(-45deg) scale(2); pointer-events: none; }
+
+        .hint {
+            z-index: 10;
+            color: #c9184a;
+            font-size: 16px;
+            font-weight: 600;
+            background: rgba(255,255,255,0.6);
+            padding: 8px 18px;
+            border-radius: 20px;
+            animation: pulse 1.6s ease-in-out infinite;
+        }
+        @keyframes pulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.05); opacity: 0.8; } }
+        /* Когда письмо открыто — подсказка переезжает вниз экрана поверх затемнения */
+        body.expanded #hint {
+            position: fixed;
+            bottom: 18px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 70;
+            animation: none;
+            white-space: nowrap;
+        }
+
+        /* Затемнение фона под большим письмом */
+        #backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(255, 92, 138, 0.22);
+            backdrop-filter: blur(2px);
+            -webkit-backdrop-filter: blur(2px);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.35s ease;
+            z-index: 50;
+        }
+        body.expanded #backdrop { opacity: 1; pointer-events: auto; }
+
+        /* Большой лист — на пол-экрана */
+        #sheet {
+            position: fixed;
+            left: 50%;
+            top: 46%;
+            transform: translate(-50%, -50%) scale(0.2) rotate(-6deg);
+            opacity: 0;
+            width: min(92vw, 600px);
+            max-height: 76vh;
+            background: #fffdfd;
+            border: 3px solid #ffb3c1;
+            outline: 2px dashed #ff8fab;
+            outline-offset: 7px;
+            border-radius: 14px;
+            box-shadow: 0 25px 70px rgba(201, 24, 74, 0.35);
+            padding: 30px 40px 26px;
+            z-index: 60;
+            pointer-events: none;
+            transition: transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
+        }
+        body.expanded #sheet {
+            transform: translate(-50%, -50%) scale(1) rotate(-0.5deg);
+            opacity: 1;
+            pointer-events: auto;
+        }
+        /* Декоративный скотч по углам */
+        #sheet::before, #sheet::after {
+            content: '';
+            position: absolute;
+            top: -15px;
+            width: 96px;
+            height: 28px;
+            background: rgba(255, 179, 193, 0.9);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.12);
+            border-left: 1px dashed rgba(255,255,255,0.8);
+            border-right: 1px dashed rgba(255,255,255,0.8);
+        }
+        #sheet::before { left: 34px; transform: rotate(-9deg); }
+        #sheet::after { right: 34px; transform: rotate(9deg); }
+
+        #sheetClose {
+            position: absolute;
+            top: 10px;
+            right: 12px;
+            width: 34px;
+            height: 34px;
+            border: none;
+            border-radius: 50%;
+            background: #ffe5ec;
+            color: #c9184a;
+            font-size: 17px;
+            cursor: pointer;
+            line-height: 1;
+            transition: background 0.2s ease, transform 0.2s ease;
+            z-index: 2;
+        }
+        #sheetClose:hover { background: #ffc2d1; transform: scale(1.1); }
+
+        .sheet-scroll {
+            overflow-y: auto;
+            max-height: calc(76vh - 90px);
+            padding-right: 6px;
+            color: #4a4a4a;
+            font-size: 19px;
+            line-height: 1.75;
+            text-align: justify;
+        }
+        .sheet-scroll::-webkit-scrollbar { width: 5px; }
+        .sheet-scroll::-webkit-scrollbar-thumb { background: #ffb3c1; border-radius: 4px; }
+        .sheet-scroll h2 {
+            text-align: center;
+            color: #ff5c8a;
+            font-size: 28px;
+            margin: 0 0 6px 0;
+        }
+        .sheet-scroll p { margin: 0 0 14px 0; }
+        .sheet-scroll .orn {
+            text-align: center;
+            font-size: 22px;
+            letter-spacing: 8px;
+            margin: 0 0 14px 0;
+        }
+        .sheet-scroll .the-end {
+            text-align: center;
+            margin: 6px 0 0 0;
+            font-weight: 600;
+            color: #ff5c8a;
+        }
+
+        @media (max-width: 520px) {
+            #sheet { padding: 24px 20px 20px; }
+            .sheet-scroll { font-size: 17px; line-height: 1.7; }
+            .sheet-scroll h2 { font-size: 23px; }
+        }
+
+        /* 📷 Фото-полароиды по бокам письма: появляются при открытии, каждое под своим углом */
+        #photos {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 55; /* выше затемнения, ниже письма */
+        }
+        .photo {
+            position: absolute;
+            margin: 0;
+            background: #fff;
+            padding: 14px 14px 10px;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(201, 24, 74, 0.3);
+            width: var(--w, 170px);
+            opacity: 0;
+            pointer-events: auto;
+            transform: rotate(var(--rot, 0deg)) scale(0);
+            transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
+            transition-delay: 0s;
+        }
+        .photo.left { left: var(--x); top: var(--y); }
+        .photo.right { right: var(--x); top: var(--y); }
+        body.expanded .photo {
+            opacity: 1;
+            transform: rotate(var(--rot, 0deg)) scale(1);
+            transition-delay: var(--d, 0s);
+            cursor: zoom-in;
+        }
+        .photo img {
+            display: block;
+            width: 100%;
+            height: auto; /* без обрезки — фото видно целиком */
+            border-radius: 3px;
+        }
+        .photo figcaption {
+            min-height: 1.2em;
+            font-size: 14px;
+            font-style: italic;
+            color: #c9184a;
+            text-align: center;
+            padding-top: 5px;
+        }
+        /* Кусочек скотча сверху каждого фото */
+        .photo::before {
+            content: '';
+            position: absolute;
+            top: -11px;
+            left: 50%;
+            transform: translateX(-50%) rotate(-3deg);
+            width: 64px;
+            height: 22px;
+            background: rgba(255, 179, 193, 0.9);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.12);
+        }
+        .zoom-hint {
+            text-align: center;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            color: #ff5c8a;
+            padding-top: 2px;
+        }
+        /* Просмотр фото крупно */
+        #lightbox {
+            position: fixed;
+            inset: 0;
+            z-index: 200;
+            background: rgba(80, 10, 35, 0.8);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            padding: 20px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        #lightbox.show { opacity: 1; pointer-events: auto; }
+        #lightbox img {
+            max-width: min(88vw, 900px);
+            max-height: 74vh;
+            border: 12px solid #fff;
+            border-radius: 8px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            transform: scale(0.9);
+            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        #lightbox.show img { transform: scale(1); }
+        #lightboxCap {
+            color: #fff;
+            font-size: 18px;
+            font-style: italic;
+            max-width: 88vw;
+            text-align: center;
+        }
+        #lightboxClose {
+            position: absolute;
+            top: 16px;
+            right: 20px;
+            width: 40px;
+            height: 40px;
+            border: none;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.9);
+            color: #c9184a;
+            font-size: 19px;
+            cursor: pointer;
+            line-height: 1;
+        }
+        /* На средних экранах фото меньше, чтобы не лезли на письмо */
+        @media (max-width: 1250px) {
+            .photo { width: 140px; }
+        }
+        /* На низких экранах фото компактнее по высоте */
+        @media (max-height: 760px) {
+            .photo { width: 125px; }
+            .photo figcaption { font-size: 12px; }
+        }
+        /* На узких экранах фото прячем, чтобы не закрывали письмо */
+        @media (max-width: 1080px) {
+            .photo { display: none; }
+        }
+
+        /* Фоновые сердечки-эмодзи: видны всегда, без CSS-фигур */
+        .background-heart {
+            position: absolute;
+            top: 0;
+            pointer-events: none;
+            animation: floatUp 6s linear forwards;
+            will-change: transform, opacity;
+        }
+        @keyframes floatUp {
+            0% { transform: translate(0, 105vh); opacity: 0; }
+            12% { opacity: 0.85; }
+            50% { transform: translate(var(--sway), 45vh); opacity: 0.85; }
+            88% { opacity: 0.6; }
+            100% { transform: translate(0, -15vh); opacity: 0; }
+        }
+
+        /* Искры при открытии — разлетаются через --dx/--dy */
+        .sparkle {
+            position: fixed;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 100;
+            animation: sparkleAnim 1s ease-out forwards;
+        }
+        @keyframes sparkleAnim {
+            0% { transform: translate(0, 0) scale(1); opacity: 1; }
+            100% { transform: translate(var(--dx), var(--dy)) scale(0); opacity: 0; }
+        }
+
+        /* Взрыв сердечек-эмодзи из конверта */
+        .burst-heart {
+            position: fixed;
+            pointer-events: none;
+            z-index: 100;
+            animation: burstAnim 1.4s ease-out forwards;
+        }
+        @keyframes burstAnim {
+            0% { transform: translate(0, 0) scale(0.5) rotate(0deg); opacity: 1; }
+            100% { transform: translate(var(--dx), var(--dy)) scale(1.3) rotate(var(--rot)); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="hearts-container"></div>
+
+    <div class="wrapper" id="wrapper" tabindex="0" role="button" aria-label="Открыть письмо">
+        <div class="heart-lock"></div>
+        <div class="envelope"></div>
+        <div id="mini">💌</div>
+    </div>
+
+    <div class="hint" id="hint">💌 Нажми на конверт 💌</div>
+
+    <div id="backdrop"></div>
+
+    <!-- 📷 ФОТО ПО БОКАМ: подписи в <figcaption> (ищи ✏️), картинки — в папке screenshots рядом с love.html -->
+    <div id="photos" aria-hidden="true">
+        <figure class="photo left" style="--x: 1vw; --y: 1%; --rot: -7deg; --d: 0.15s; --w: 175px;">
+            <img src="screenshots/photo1.jpg" alt="Как ты радовалась и паралельно злюкалась">
+            <figcaption><!-- ✏️ Подпись 1: --></figcaption>
+            <div class="zoom-hint">жми ⬆</div>
+        </figure>
+        <figure class="photo left" style="--x: 8vw; --y: 21%; --rot: 6deg; --d: 0.3s; --w: 145px;">
+            <img src="screenshots/photo2.jpg" alt="Забота обо мне">
+            <figcaption><!-- ✏️ Подпись 2: напиши свой текст сюда --></figcaption>
+            <div class="zoom-hint">жми ⬆</div>
+        </figure>
+        <figure class="photo left" style="--x: 2vw; --y: 46%; --rot: -5deg; --d: 0.45s; --w: 180px;">
+            <img src="screenshots/photo3.jpg" alt="Как тебе было комфортно со мной">
+            <figcaption><!-- ✏️ Подпись 3: напиши свой текст сюда --></figcaption>
+            <div class="zoom-hint">жми ⬆</div>
+        </figure>
+        <figure class="photo left" style="--x: 8vw; --y: 67%; --rot: 7deg; --d: 0.6s; --w: 160px;">
+            <img src="screenshots/photo4.jpg" alt="Снова хочу быть тем самым котёночком для тебя">
+            <figcaption><!-- ✏️ Подпись 4: напиши свой текст сюда --></figcaption>
+            <div class="zoom-hint">жми ⬆</div>
+        </figure>
+        <figure class="photo left" style="--x: 2vw; --y: 85%; --rot: -6deg; --d: 0.75s; --w: 170px;">
+            <img src="screenshots/photo5.jpg" alt="Твои переживашки">
+            <figcaption><!-- ✏️ Подпись 5: напиши свой текст сюда --></figcaption>
+            <div class="zoom-hint">жми ⬆</div>
+        </figure>
+        <figure class="photo right" style="--x: 1vw; --y: 5%; --rot: 7deg; --d: 0.2s; --w: 170px;">
+            <img src="screenshots/photo6.jpg" alt="Как радовалась мне">
+            <figcaption><!-- ✏️ Подпись 6: напиши свой текст сюда --></figcaption>
+            <div class="zoom-hint">жми ⬆</div>
+        </figure>
+        <figure class="photo right" style="--x: 8vw; --y: 24%; --rot: -6deg; --d: 0.35s; --w: 180px;">
+            <img src="screenshots/photo7.jpg" alt="Был для тебя всем">
+            <figcaption><!-- ✏️ Подпись 7: напиши свой текст сюда --></figcaption>
+            <div class="zoom-hint">жми ⬆</div>
+        </figure>
+        <figure class="photo right" style="--x: 2vw; --y: 43%; --rot: 5deg; --d: 0.5s; --w: 155px;">
+            <img src="screenshots/photo8.jpg" alt="Надеюсь, ты с таким же мнением осталась">
+            <figcaption><!-- ✏️ Подпись 8: напиши свой текст сюда --></figcaption>
+            <div class="zoom-hint">жми ⬆</div>
+        </figure>
+        <figure class="photo right" style="--x: 8vw; --y: 62%; --rot: -7deg; --d: 0.65s; --w: 175px;">
+            <img src="screenshots/photo9.jpg" alt="Как ты вела себя, как милый ребёночек">
+            <figcaption><!-- ✏️ Подпись 9: напиши свой текст сюда --></figcaption>
+            <div class="zoom-hint">жми ⬆</div>
+        </figure>
+        <figure class="photo right" style="--x: 2vw; --y: 81%; --rot: 6deg; --d: 0.8s; --w: 165px;">
+            <img src="screenshots/photo10.jpg" alt="Ласково меня называла">
+            <figcaption><!-- ✏️ Подпись 10: напиши свой текст сюда --></figcaption>
+            <div class="zoom-hint">жми ⬆</div>
+        </figure>
+    </div>
+
+    <!-- 🔍 Просмотр фото крупно -->
+    <div id="lightbox" role="dialog" aria-modal="true" aria-label="Фото крупно">
+        <button id="lightboxClose" aria-label="Закрыть фото">✕</button>
+        <img id="lightboxImg" src="screenshots/photo1.jpg" alt="Фото крупно">
+        <div id="lightboxCap"></div>
+    </div>
+
+    <div id="sheet" role="dialog" aria-modal="true" aria-label="Письмо">
+        <button id="sheetClose" aria-label="Закрыть письмо">✕</button>
+        <div class="sheet-scroll">
+            <h2>Моей Неферут! ❤️</h2>
+            <div class="orn">💌 ❤️ 💌</div>
+            <p>Пишу тебе это письмо, потому что мне не всё равно. Я долго думал, стоит ли писать, но понял, что не хочу молчать. Внутри меня всё ещё горит огонёк к тебе, и я не хочу делать вид, что мне безразлично.</p>
+            <p>Ты великолепная девочка. Я правда так считаю. Ты эмоциональная, милая, красивая, добрая и заботливая. Я очень любил и люблю тебя — до безумия, почти всегда забывая о себе. Но я не хочу, чтобы это звучало как упрёк или попытка вызвать жалость. Я просто хочу, чтобы ты знала: мои чувства были и остаются настоящими.</p>
+            <p>Я понимаю, что мы оба не идеальны. Я тоже совершал ошибки. Иногда я не слышал тебя, иногда вёл себя безответственно, иногда не думал о твоих чувствах так, как должен был. Я не снимаю с себя вины и не ищу оправданий. Я готов работать над собой — не словами, а делами.</p>
+            <p>Но я пишу это не для того, чтобы унижаться или выпрашивать. Я не считаю, что во всём виноват только я. В наших отношениях были моменты, когда мне казалось, что ты выбираешь себя, а не нас. Я не хочу упрекать — я хочу, чтобы если мы и говорим, то честно и на равных.</p>
+            <p>Мне не хватает наших тёплых моментов. Твоей заботы, твоей милой улыбки с щёчками, твоих голосовых, где ты поёшь, твоих милых кружочков, той близости, которая была между нами. Я скучаю по тебе — не по идеальной картинке, а по живой тебе: разной, настоящей, эмоциональной.</p>
+            <p>Я не знаю, что ты чувствуешь сейчас, и не хочу ничего предполагать. Но я хотел, чтобы ты знала: я пишу это не для того, чтобы поставить точку или вернуть всё одним письмом. Я пишу, потому что ты мне дорога.</p>
+            <p>Я не хочу ставить условий, давить или требовать. Я просто хочу спросить: есть ли у нас ещё шанс попробовать снова? Я готов делать шаги навстречу, если ты тоже готова. Если тебе нужно время — я пойму. Если ты хочешь поговорить — я рядом.</p>
+            <p>Если ты не против, давай встретимся и просто поговорим. Без ссор, обвинений и старых обид. Просто чтобы услышать друг друга. Я не хочу возвращать прошлое в точности — я хочу, чтобы мы могли построить что-то более бережное, если это возможно.</p>
+            <p>Если ты захочешь встретиться, давай сделаем это там, где мы впервые поцеловались и впервые открыли друг другу самое сокровенное. Там, где началась наша история. Не для того, чтобы вернуть её прежней, а чтобы написать новую главу!</p>
+            <p>Я не заставляю, понимаю, тебе тоже тяжело. Поэтому когда ты будешь готова - напиши и я буду ждать!</p>
+            <p class="the-end">✨ Конец письма ✨</p>
+        </div>
+    </div>
+
+    <script>
+        var wrapper = document.getElementById('wrapper');
+        var hint = document.getElementById('hint');
+        var container = document.getElementById('hearts-container');
+        var backdrop = document.getElementById('backdrop');
+        var sheetClose = document.getElementById('sheetClose');
+
+        var isOpen = false;
+        var busy = false;
+
+        wrapper.addEventListener('click', function () {
+            if (isOpen) { closeSeq(); } else { openSeq(); }
+        });
+        wrapper.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                if (isOpen) { closeSeq(); } else { openSeq(); }
+            }
+        });
+        sheetClose.addEventListener('click', function (e) { e.stopPropagation(); closeSeq(); });
+        backdrop.addEventListener('click', function () { closeSeq(); });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') {
+                if (lightbox.classList.contains('show')) { closeLightbox(); }
+                else { closeSeq(); }
+            }
+        });
+
+        // 🔍 Клик по фото — открыть крупно
+        var lightbox = document.getElementById('lightbox');
+        var lightboxImg = document.getElementById('lightboxImg');
+        var lightboxCap = document.getElementById('lightboxCap');
+        var lightboxClose = document.getElementById('lightboxClose');
+
+        function closeLightbox() { lightbox.classList.remove('show'); }
+
+        Array.prototype.forEach.call(document.querySelectorAll('.photo'), function (fig) {
+            fig.addEventListener('click', function () {
+                if (!isOpen) return;
+                var img = fig.querySelector('img');
+                var cap = fig.querySelector('figcaption').textContent.trim();
+                lightboxImg.src = img.src;
+                lightboxImg.alt = img.alt;
+                lightboxCap.textContent = cap || img.alt;
+                lightbox.classList.add('show');
+            });
+        });
+        lightboxClose.addEventListener('click', function (e) { e.stopPropagation(); closeLightbox(); });
+        lightbox.addEventListener('click', function (e) {
+            if (e.target === lightbox) closeLightbox();
+        });
+
+        // Этап 1: крышка открывается, вылезает маленькая бумажка.
+        // Этап 2 (через 600мс): бумажка разворачивается в большой лист.
+        function openSeq() {
+            if (busy || isOpen) return;
+            busy = true;
+            isOpen = true;
+            wrapper.classList.add('open');
+            hint.textContent = '❤️ Читай медленно ❤️';
+            createSparks();
+            createBurstHearts();
+            setTimeout(function () {
+                document.body.classList.add('expanded');
+                busy = false;
+                for (var j = 0; j < 6; j++) { setTimeout(createHeart, j * 150); }
+            }, 600);
+        }
+
+        function closeSeq() {
+            if (busy || !isOpen) return;
+            busy = true;
+            isOpen = false;
+            document.body.classList.remove('expanded');
+            hint.textContent = '💌 Нажми на конверт 💌';
+            setTimeout(function () {
+                wrapper.classList.remove('open');
+                busy = false;
+            }, 350);
+        }
+
+        // Фоновые сердечки-эмодзи: летят только когда письмо открыто
+        var BG_EMOJIS = ['❤️', '💖', '💕', '💗', '💓', '💘'];
+        function createHeart() {
+            if (!isOpen) return;
+            var heart = document.createElement('div');
+            heart.className = 'background-heart';
+            heart.textContent = BG_EMOJIS[Math.floor(Math.random() * BG_EMOJIS.length)];
+            var size = Math.random() * 18 + 14; // 14–32px, крупно и заметно
+            var duration = Math.random() * 3 + 4; // 4–7 c
+            heart.style.left = (Math.random() * 96) + 'vw';
+            heart.style.fontSize = size + 'px';
+            heart.style.opacity = '0';
+            heart.style.animationDuration = duration + 's';
+            heart.style.setProperty('--sway', ((Math.random() - 0.5) * 80) + 'px');
+            container.appendChild(heart);
+            setTimeout(function () {
+                if (heart.parentNode) heart.parentNode.removeChild(heart);
+            }, duration * 1000 + 500);
+        }
+
+        // Разлетающиеся искры
+        function createSparks() {
+            var rect = wrapper.getBoundingClientRect();
+            var cx = rect.left + rect.width / 2;
+            var cy = rect.top + rect.height / 2;
+            var colors = ['#ffb3c1', '#ff758f', '#ff5c8a', '#e63946', '#ffc2d1', '#fff0f3'];
+            for (var i = 0; i < 30; i++) {
+                (function () {
+                    var s = document.createElement('div');
+                    s.className = 'sparkle';
+                    var angle = (Math.PI * 2 * i) / 30 + (Math.random() - 0.5) * 0.5;
+                    var dist = Math.random() * 150 + 60;
+                    s.style.left = cx + 'px';
+                    s.style.top = cy + 'px';
+                    s.style.setProperty('--dx', (Math.cos(angle) * dist) + 'px');
+                    s.style.setProperty('--dy', (Math.sin(angle) * dist) + 'px');
+                    s.style.background = colors[Math.floor(Math.random() * colors.length)];
+                    var sz = Math.random() * 6 + 4;
+                    s.style.width = sz + 'px';
+                    s.style.height = sz + 'px';
+                    document.body.appendChild(s);
+                    setTimeout(function () { if (s.parentNode) s.parentNode.removeChild(s); }, 1000);
+                })();
+            }
+        }
+
+        // Сердечки-эмодзи, взлетающие из конверта
+        function createBurstHearts() {
+            var rect = wrapper.getBoundingClientRect();
+            var cx = rect.left + rect.width / 2;
+            var cy = rect.top + 40;
+            var emojis = ['❤️', '💖', '💕', '💗', '💓'];
+            for (var i = 0; i < 16; i++) {
+                (function (i) {
+                    var h = document.createElement('div');
+                    h.className = 'burst-heart';
+                    h.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+                    h.style.left = cx + 'px';
+                    h.style.top = cy + 'px';
+                    h.style.fontSize = (Math.random() * 16 + 14) + 'px';
+                    var angle = -Math.PI / 2 + (Math.random() - 0.5) * 1.8;
+                    var dist = Math.random() * 220 + 80;
+                    h.style.setProperty('--dx', (Math.cos(angle) * dist) + 'px');
+                    h.style.setProperty('--dy', (Math.sin(angle) * dist) + 'px');
+                    h.style.setProperty('--rot', ((Math.random() - 0.5) * 120) + 'deg');
+                    h.style.animationDelay = (i * 0.03) + 's';
+                    document.body.appendChild(h);
+                    setTimeout(function () { if (h.parentNode) h.parentNode.removeChild(h); }, 1800);
+                })(i);
+            }
+        }
+
+        // Фон летит только при открытом письме (createHeart сам проверяет флаг isOpen)
+        setInterval(createHeart, 350);
+    </script>
+</body>
+</html>
