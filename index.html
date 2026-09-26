@@ -18,6 +18,7 @@
             background: linear-gradient(135deg, #ffe5ec, #ffc2d1);
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             overflow: hidden;
+            touch-action: manipulation; /* без задержки тапа и зума по двойному тапу */
         }
 
         /* Контейнер фоновых сердечек — на весь экран, клики сквозь него */
@@ -215,13 +216,13 @@
             position: absolute;
             top: 10px;
             right: 12px;
-            width: 34px;
-            height: 34px;
+            width: 44px;
+            height: 44px;
             border: none;
             border-radius: 50%;
             background: #ffe5ec;
             color: #c9184a;
-            font-size: 17px;
+            font-size: 19px;
             cursor: pointer;
             line-height: 1;
             transition: background 0.2s ease, transform 0.2s ease;
@@ -386,9 +387,65 @@
             .photo { width: 125px; }
             .photo figcaption { font-size: 12px; }
         }
-        /* На узких экранах фото прячем, чтобы не закрывали письмо */
+        /* Планшет и ПК — фото по бокам как на десктопе, чуть компактнее чтобы не лезли на письмо */
         @media (max-width: 1080px) {
-            .photo { display: none; }
+            .photo { width: 120px; }
+        }
+        @media (max-width: 850px) {
+            .photo { width: 100px; }
+            .photo figcaption { font-size: 11px; }
+        }
+        /* Только телефон — фото лентой снизу, чтобы не закрывали письмо */
+        @media (max-width: 700px) {
+            #sheet {
+                top: 39%;
+                max-height: 58vh;
+                width: min(94vw, 600px);
+            }
+            .sheet-scroll {
+                max-height: calc(58vh - 90px);
+            }
+            #photos {
+                inset: auto 0 58px 0;
+                display: flex;
+                gap: 10px;
+                overflow-x: auto;
+                overflow-y: visible;
+                padding: 16px 12px 10px;
+                pointer-events: none;
+                visibility: hidden;
+                z-index: 65;
+                -webkit-overflow-scrolling: touch;
+                touch-action: pan-x pan-y;
+                scrollbar-width: thin;
+            }
+            body.expanded #photos {
+                visibility: visible;
+                pointer-events: auto;
+            }
+            .photo.left, .photo.right {
+                position: relative;
+                left: auto;
+                right: auto;
+                top: auto;
+                flex: 0 0 auto;
+                width: 112px;
+                margin: 0;
+                padding: 8px 8px 6px;
+            }
+            .photo figcaption { font-size: 12px; }
+            .zoom-hint { font-size: 11px; }
+        }
+        @media (max-width: 520px) {
+            #sheet {
+                top: 37%;
+                max-height: 56vh;
+            }
+            .sheet-scroll {
+                max-height: calc(56vh - 80px);
+            }
+            .photo.left, .photo.right { width: 96px; }
+            #photos { bottom: 56px; gap: 8px; }
         }
 
         /* Фоновые сердечки-эмодзи: видны всегда, без CSS-фигур */
