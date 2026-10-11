@@ -555,6 +555,77 @@
         #news-modal .row button { flex: 1; padding: 12px; border-radius: 12px; border: none; font-size: 16px; cursor: pointer; }
         #news-ok { background: #ff5c8a; color: #fff; }
         #news-later { background: #ffe5ec; color: #c9184a; }
+        /* ✉️ Инбокс: кнопка с бейджем + список всех уведомлений */
+        #inbox-btn {
+            position: fixed;
+            bottom: 76px;
+            right: 14px;
+            z-index: 300;
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            border: 2px solid #ff8fab;
+            background: #fff;
+            font-size: 22px;
+            cursor: pointer;
+            box-shadow: 0 8px 22px rgba(201,24,74,.3);
+        }
+        #inbox-badge {
+            position: absolute;
+            top: -4px;
+            right: -4px;
+            min-width: 22px;
+            height: 22px;
+            padding: 0 5px;
+            border-radius: 11px;
+            background: #e63946;
+            color: #fff;
+            font-size: 12px;
+            font-weight: 700;
+            line-height: 22px;
+            text-align: center;
+            display: none;
+        }
+        #inbox-badge.show { display: block; }
+        #inbox-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 400;
+            background: rgba(80,10,35,.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 18px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .3s ease;
+        }
+        #inbox-modal.show { opacity: 1; pointer-events: auto; }
+        #inbox-modal .card {
+            background: #fff;
+            border-radius: 16px;
+            max-width: 440px;
+            width: 100%;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+            padding: 22px;
+            border: 3px solid #ffb3c1;
+        }
+        #inbox-modal h3 { margin: 0 0 12px; color: #c9184a; text-align: center; }
+        #inbox-list { overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+        .inbox-item {
+            border: 2px solid #ffe5ec;
+            border-radius: 12px;
+            padding: 10px 12px;
+            background: #fffdfd;
+        }
+        .inbox-item.unread { border-color: #ff5c8a; background: #fff0f3; }
+        .inbox-item b { color: #c9184a; display: block; margin-bottom: 2px; font-size: 15px; }
+        .inbox-item p { margin: 0; font-size: 14px; color: #4a4a4a; line-height: 1.5; }
+        .inbox-item small { color: #b5838d; font-size: 12px; }
+        #inbox-modal .row { display: flex; gap: 10px; margin-top: 14px; }
+        #inbox-close { flex: 1; padding: 12px; border-radius: 12px; border: none; font-size: 16px; cursor: pointer; background: #ff5c8a; color: #fff; }
     </style>
     <!-- OneSignal Web Push (для пуша на закрытый планшет). APP_ID вставить ниже, см. ONESIGNAL_SETUP.txt -->
     <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
@@ -570,6 +641,16 @@
         <button id="news-x" aria-label="Закрыть">✕</button>
     </div>
     <button id="bell-btn" title="Включить уведомления" aria-label="Включить уведомления">🔔</button>
+    <button id="inbox-btn" title="Все уведомления" aria-label="Все уведомления">✉️<span id="inbox-badge">0</span></button>
+    <div id="inbox-modal" role="dialog" aria-modal="true" aria-label="Все уведомления">
+        <div class="card">
+            <h3>✉️ Все уведомления</h3>
+            <div id="inbox-list"></div>
+            <div class="row">
+                <button id="inbox-close">Закрыть</button>
+            </div>
+        </div>
+    </div>
     <div id="news-modal" role="dialog" aria-modal="true" aria-label="Новое сообщение">
         <div class="card">
             <h3 id="modal-title">💌 Тебе новое сообщение!</h3>
@@ -837,6 +918,11 @@
             var mText = document.getElementById('modal-text');
             var mOk = document.getElementById('news-ok');
             var mLater = document.getElementById('news-later');
+            var inboxBtn = document.getElementById('inbox-btn');
+            var inboxBadge = document.getElementById('inbox-badge');
+            var inboxModal = document.getElementById('inbox-modal');
+            var inboxList = document.getElementById('inbox-list');
+            var inboxClose = document.getElementById('inbox-close');
 
             // OneSignal Web Push (Custom Code). Worker лежит НЕ в корне origin,
             // а в /letter/, поэтому явно указываем путь и scope (иначе SDK
@@ -863,6 +949,96 @@
                 } catch (e) {}
             });
 
+            // OneSignal: пуш, пришедший при открытой вкладке, тоже кладем в инбокс
+            window.OneSignalDeferred.push(function (OneSignal) {
+                try {
+                    if (OneSignal.Notifications && OneSignal.Notifications.addEventListener) {
+                        OneSignal.Notifications.addEventListener('foregroundWillDisplay', function (e) {
+                            var n = e.getNotification ? e.getNotification() : {};
+                            addLocalLog({ title: n.title || '💌 Новое уведомление', text: n.body || '', date: today() });
+                            renderInbox();
+                            showNews(n.title || '💌 Новое уведомление', n.body || '');
+                        });
+                    }
+                } catch (err) {}
+            });
+
+            /* ✉️ Инбокс: лента news.json + локальный журнал пушей, бейдж непрочитанных */
+            var feed = [];
+            function today() {
+                try { return new Date().toISOString().slice(0, 10); } catch (e) { return ''; }
+            }
+            function getSeen() {
+                try { return parseInt(localStorage.getItem('letter_seen_id') || '0', 10) || 0; } catch (e) { return 0; }
+            }
+            function setSeen(v) {
+                try { localStorage.setItem('letter_seen_id', String(v)); } catch (e) {}
+            }
+            function getLocalLog() {
+                try { return JSON.parse(localStorage.getItem('letter_local_log') || '[]'); } catch (e) { return []; }
+            }
+            function addLocalLog(entry) {
+                try {
+                    var log = getLocalLog();
+                    var dup = log.some(function (x) { return x.title === entry.title && x.text === entry.text; }) ||
+                        feed.some(function (x) { return x.title === entry.title && x.text === entry.text; });
+                    if (dup) return;
+                    entry.key = 'local-' + Date.now();
+                    entry.read = false;
+                    log.unshift(entry);
+                    localStorage.setItem('letter_local_log', JSON.stringify(log.slice(0, 50)));
+                } catch (e) {}
+            }
+            function allEntries() {
+                var seenKeys = {};
+                var out = [];
+                feed.forEach(function (x) {
+                    var k = 'feed-' + x.id;
+                    if (!seenKeys[k]) { seenKeys[k] = 1; out.push({ key: k, id: x.id, title: x.title, text: x.text, date: x.date || '', unread: x.id > getSeen() }); }
+                });
+                getLocalLog().forEach(function (x) {
+                    var k = x.key || ('local-' + x.title + x.text);
+                    if (!seenKeys[k]) { seenKeys[k] = 1; out.push({ key: k, id: 0, title: x.title, text: x.text, date: x.date || '', unread: !x.read }); }
+                });
+                out.sort(function (a, b) { return (b.id - a.id) || String(b.date).localeCompare(String(a.date)); });
+                return out;
+            }
+            function updateBadge() {
+                var n = allEntries().filter(function (x) { return x.unread; }).length;
+                inboxBadge.textContent = n > 9 ? '9+' : String(n);
+                inboxBadge.classList.toggle('show', n > 0);
+            }
+            function renderInbox() {
+                var items = allEntries();
+                inboxList.innerHTML = '';
+                if (!items.length) {
+                    inboxList.innerHTML = '<div class="inbox-item"><p>Пока тихо… Новые уведомления появятся здесь ❤️</p></div>';
+                }
+                items.forEach(function (x) {
+                    var d = document.createElement('div');
+                    d.className = 'inbox-item' + (x.unread ? ' unread' : '');
+                    var b = document.createElement('b');
+                    b.textContent = x.title;
+                    var p = document.createElement('p');
+                    p.textContent = x.text;
+                    var s = document.createElement('small');
+                    s.textContent = x.date || '';
+                    d.appendChild(b); d.appendChild(p); d.appendChild(s);
+                    inboxList.appendChild(d);
+                });
+                updateBadge();
+            }
+            function markAllRead() {
+                var maxId = 0;
+                feed.forEach(function (x) { if (x.id > maxId) maxId = x.id; });
+                setSeen(maxId);
+                try {
+                    var log = getLocalLog().map(function (x) { x.read = true; return x; });
+                    localStorage.setItem('letter_local_log', JSON.stringify(log));
+                } catch (e) {}
+                updateBadge();
+            }
+
             function showNews(title, text) {
                 bTitle.textContent = title;
                 bText.textContent = text;
@@ -883,20 +1059,33 @@
             mOk.addEventListener('click', function () {
                 modal.classList.remove('show');
                 banner.classList.remove('show');
-                try { localStorage.setItem('letter_seen_v', String(latestVer)); } catch (e) {}
+                markAllRead();
+                renderInbox();
                 if (!isOpen) openSeq();
             });
+            inboxBtn.addEventListener('click', function () {
+                renderInbox();
+                inboxModal.classList.add('show');
+            });
+            inboxClose.addEventListener('click', function () {
+                inboxModal.classList.remove('show');
+                markAllRead();
+                renderInbox();
+            });
 
-            var latestVer = 0;
+            var latestId = 0;
             function checkNews() {
-                fetch('./message.json?v=' + Date.now(), { cache: 'no-store' })
+                fetch('./news.json?v=' + Date.now(), { cache: 'no-store' })
                     .then(function (r) { return r.ok ? r.json() : null; })
-                    .then(function (msg) {
-                        if (!msg || typeof msg.version !== 'number') return;
-                        latestVer = msg.version;
-                        var seen = 0;
-                        try { seen = parseInt(localStorage.getItem('letter_seen_v') || '0', 10) || 0; } catch (e) {}
-                        if (msg.version > seen) showNews(msg.title || '💌 Тебе новое сообщение!', msg.text || '');
+                    .then(function (list) {
+                        if (!list || !list.length) return;
+                        feed = list;
+                        latestId = list.reduce(function (m, x) { return x.id > m ? x.id : m; }, 0);
+                        if (latestId > getSeen()) {
+                            var top = list.filter(function (x) { return x.id === latestId; })[0];
+                            if (top) showNews(top.title, top.text);
+                        }
+                        renderInbox();
                     })
                     .catch(function () {});
             }
