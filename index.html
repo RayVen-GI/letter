@@ -656,7 +656,7 @@
             <h3 id="modal-title">💌 Тебе новое сообщение!</h3>
             <p id="modal-text">Открой письмо — там что-то новое для тебя ❤️</p>
             <div class="row">
-                <button id="news-ok">Открыть ❤️</button>
+                <button id="news-ok">Прочитать</button>
                 <button id="news-later">Позже</button>
             </div>
         </div>
@@ -1061,7 +1061,6 @@
                 banner.classList.remove('show');
                 markAllRead();
                 renderInbox();
-                if (!isOpen) openSeq();
             });
             inboxBtn.addEventListener('click', function () {
                 renderInbox();
