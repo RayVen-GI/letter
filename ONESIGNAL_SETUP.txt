@@ -5,7 +5,8 @@
 - message.json: меняешь title/text/version -> при следующем открытии сайта у неё вылезет баннер + модалка.
   Пока вкладка открыта, проверка идёт каждые 15 сек сама.
 - Кнопка 🔔 на сайте: она жмёт 1 раз -> "Разрешить" -> системные уведомления на ЕЁ планшете включены.
-- sw.js + OneSignalSDKWorker.js уже лежат в корне (так надо для пушей на GitHub Pages).
+- OneSignalSDKWorker.js лежит в /letter/ (код в index.html уже указывает serviceWorkerPath + scope /letter/).
+  ВАЖНО: в кабинете OneSignal должны совпадать настройки воркера (см. шаг 2а ниже).
 
 Но важно честно:
 - Без внешнего push-сервиса пуш на ЗАКРЫТЫЙ планшет невозможен чисто статикой.
@@ -14,10 +15,18 @@
 
 ШАГИ (5 минут, делаешь ты 1 раз):
 1. Зайди на https://onesignal.com -> Sign Up (бесплатный план Free).
-2. Add App -> Web -> Custom code.
+2. Add App -> Web.
    - Site URL: https://rayven-gi.github.io
-   - Site path: /letter/
-   - Permission prompt: bell + slide prompt (по умолчанию норм).
+2а. Про воркер (обязательно, иначе "couldn't find a subscription"):
+    Если выбрал Custom Code: ничего в кабинете трогать не надо, путь уже прописан
+    в index.html (serviceWorkerPath: letter/OneSignalSDKWorker.js, scope: /letter/).
+    Если выбрал Typical Site:_code_ игнорируется, вместо этого иди в
+    Settings -> Push & In-App -> Web -> Advanced Push Settings ->
+    включи "Customize service worker paths and filenames" и введи:
+      Path to service worker files: /letter/
+      Service worker filename: OneSignalSDKWorker.js
+      Registration scope: /letter/
+    Мешать оба способа нельзя (либо код, либо кабинет).
 3. Скопируй APP ID вида xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.
 4. На github.com открой свой репозиторий letter -> index.html -> Edit (карандаш):
    Найди строку: var ONESIGNAL_APP_ID = '';

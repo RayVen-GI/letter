@@ -838,17 +838,20 @@
             var mOk = document.getElementById('news-ok');
             var mLater = document.getElementById('news-later');
 
-            // Регистрация Service Worker (нужен для уведомлений)
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.register('./sw.js').catch(function () {});
-            }
-
-            // OneSignal: включится сам, когда вставишь APP_ID ниже
+            // OneSignal Web Push (Custom Code). Worker лежит НЕ в корне origin,
+            // а в /letter/, поэтому явно указываем путь и scope (иначе SDK
+            // ищет https://rayven-gi.github.io/OneSignalSDKWorker.js и падает).
+            // Свой sw.js НЕ регистрируем: два воркера в одном scope конфликтуют,
+            // пушами владеет OneSignal-воркер.
             var ONESIGNAL_APP_ID = '1e071a97-5bf7-4c76-991e-39e77f38c1ae';
             window.OneSignalDeferred = window.OneSignalDeferred || [];
             window.OneSignalDeferred.push(function (OneSignal) {
                 if (!ONESIGNAL_APP_ID) return;
-                OneSignal.init({ appId: ONESIGNAL_APP_ID });
+                OneSignal.init({
+                    appId: ONESIGNAL_APP_ID,
+                    serviceWorkerPath: 'letter/OneSignalSDKWorker.js',
+                    serviceWorkerParam: { scope: '/letter/' }
+                });
             });
 
             function showNews(title, text) {
@@ -860,10 +863,8 @@
                 modal.classList.add('show');
                 // Локальное системное уведомление, если разрешение уже дано и вкладка открыта
                 try {
-                    if ('Notification' in window && Notification.permission === 'granted' && navigator.serviceWorker) {
-                        navigator.serviceWorker.getRegistration().then(function (reg) {
-                            if (reg) reg.showNotification(title, { body: text });
-                        });
+                    if ('Notification' in window && Notification.permission === 'granted') {
+                        new Notification(title, { body: text });
                     }
                 } catch (e) {}
             }

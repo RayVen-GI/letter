@@ -1,5 +1,7 @@
-// Required stub for OneSignal Web Push on GitHub Pages.
-// OneSignal SDK looks for this exact file at site root.
-// Fill ONESIGNAL_SETUP.txt APP_ID, then pushes work even with closed tablet
-// (after she taps "Allow" once).
-importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDKWorker.js');
+// OneSignal Web Push worker (v16) for GitHub Pages project site.
+// Lives at /letter/OneSignalSDKWorker.js, so index.html passes
+// serviceWorkerPath + scope in OneSignal.init() (see OneSignal docs:
+// "If the file is not at the site root and you omit these options,
+// the SDK still fetches https://yoursite.com/OneSignalSDKWorker.js
+// and registration fails").
+importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
