@@ -852,6 +852,15 @@
                     serviceWorkerPath: 'letter/OneSignalSDKWorker.js',
                     serviceWorkerParam: { scope: '/letter/' }
                 });
+                // Автоподписка: если разрешение уже дано раньше (повторный визит),
+                // сразу создаем push-подписку без клика по 🔔
+                try {
+                    if ('Notification' in window && Notification.permission === 'granted') {
+                        if (OneSignal.User && OneSignal.User.PushSubscription) {
+                            OneSignal.User.PushSubscription.optIn();
+                        }
+                    }
+                } catch (e) {}
             });
 
             function showNews(title, text) {
