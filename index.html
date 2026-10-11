@@ -901,6 +901,16 @@
                     if (perm === 'granted') {
                         bell.classList.add('on');
                         bell.textContent = '🔔✓';
+                        // Подписать этот браузер и в OneSignal (для пуша на закрытый планшет)
+                        try {
+                            (window.OneSignalDeferred = window.OneSignalDeferred || []).push(function (OneSignal) {
+                                if (OneSignal && OneSignal.User && OneSignal.User.PushSubscription) {
+                                    OneSignal.User.PushSubscription.optIn();
+                                } else if (OneSignal && OneSignal.registerForPushNotifications) {
+                                    OneSignal.registerForPushNotifications();
+                                }
+                            });
+                        } catch (e) {}
                         try { new Notification('Уведомления включены 💌', { body: 'Теперь ты узнаешь о новых письмах первой ❤️' }); } catch (e) {}
                     } else {
                         alert('Разреши уведомления в настройках браузера, чтобы приходили пуши ❤️');
