@@ -488,11 +488,98 @@
             0% { transform: translate(0, 0) scale(0.5) rotate(0deg); opacity: 1; }
             100% { transform: translate(var(--dx), var(--dy)) scale(1.3) rotate(var(--rot)); opacity: 0; }
         }
+
+        /* 🔔 Канал связи: баннер + кнопка подписки + модалка новости */
+        #news-banner {
+            position: fixed;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-150%);
+            z-index: 300;
+            max-width: min(92vw, 520px);
+            background: #fff;
+            border: 2px solid #ff8fab;
+            border-radius: 14px;
+            box-shadow: 0 12px 35px rgba(201,24,74,.3);
+            padding: 12px 16px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            transition: transform .4s cubic-bezier(.34,1.56,.64,1);
+        }
+        #news-banner.show { transform: translateX(-50%) translateY(0); }
+        #news-banner b { color: #c9184a; display: block; margin-bottom: 2px; }
+        #news-banner p { margin: 0; font-size: 14px; color: #4a4a4a; }
+        #news-banner button { border: none; background: #ffe5ec; border-radius: 50%; width: 30px; height: 30px; cursor: pointer; flex: 0 0 auto; }
+        #bell-btn {
+            position: fixed;
+            bottom: 14px;
+            right: 14px;
+            z-index: 300;
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            border: 2px solid #ff8fab;
+            background: #fff;
+            font-size: 22px;
+            cursor: pointer;
+            box-shadow: 0 8px 22px rgba(201,24,74,.3);
+        }
+        #bell-btn.on { background: #ff5c8a; color: #fff; }
+        #news-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 400;
+            background: rgba(80,10,35,.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 18px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .3s ease;
+        }
+        #news-modal.show { opacity: 1; pointer-events: auto; }
+        #news-modal .card {
+            background: #fff;
+            border-radius: 16px;
+            max-width: 420px;
+            width: 100%;
+            padding: 22px;
+            text-align: center;
+            border: 3px solid #ffb3c1;
+        }
+        #news-modal h3 { margin: 0 0 8px; color: #c9184a; }
+        #news-modal p { color: #4a4a4a; line-height: 1.6; }
+        #news-modal .row { display: flex; gap: 10px; margin-top: 14px; }
+        #news-modal .row button { flex: 1; padding: 12px; border-radius: 12px; border: none; font-size: 16px; cursor: pointer; }
+        #news-ok { background: #ff5c8a; color: #fff; }
+        #news-later { background: #ffe5ec; color: #c9184a; }
     </style>
+    <!-- OneSignal Web Push (для пуша на закрытый планшет). APP_ID вставить ниже, см. ONESIGNAL_SETUP.txt -->
+    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
 </head>
 <body>
 
     <div id="hearts-container"></div>
+
+    <!-- 🔔 Канал связи: баннер нового сообщения + кнопка уведомлений -->
+    <div id="news-banner" role="status" aria-live="polite">
+        <div style="font-size:26px">💌</div>
+        <div style="flex:1"><b id="news-title">Тебе новое сообщение!</b><p id="news-text">Открой письмо ❤️</p></div>
+        <button id="news-x" aria-label="Закрыть">✕</button>
+    </div>
+    <button id="bell-btn" title="Включить уведомления" aria-label="Включить уведомления">🔔</button>
+    <div id="news-modal" role="dialog" aria-modal="true" aria-label="Новое сообщение">
+        <div class="card">
+            <h3 id="modal-title">💌 Тебе новое сообщение!</h3>
+            <p id="modal-text">Открой письмо — там что-то новое для тебя ❤️</p>
+            <div class="row">
+                <button id="news-ok">Открыть ❤️</button>
+                <button id="news-later">Позже</button>
+            </div>
+        </div>
+    </div>
 
     <div class="wrapper" id="wrapper" tabindex="0" role="button" aria-label="Открыть письмо">
         <div class="heart-lock"></div>
@@ -734,6 +821,102 @@
 
         // Фон летит только при открытом письме (createHeart сам проверяет флаг isOpen)
         setInterval(createHeart, 350);
+
+        /* 🔔 Канал связи:
+           1) message.json опрашивается при открытии + каждые 15 сек (работает пока вкладка открыта).
+           2) Кнопка 🔔 просит разрешение и включает системные уведомления на этом планшете.
+           3) Пуш на ЗАКРЫТЫЙ планшет шлется через OneSignal (нужен APP_ID, см. ONESIGNAL_SETUP.txt). */
+        (function () {
+            var banner = document.getElementById('news-banner');
+            var bTitle = document.getElementById('news-title');
+            var bText = document.getElementById('news-text');
+            var bX = document.getElementById('news-x');
+            var bell = document.getElementById('bell-btn');
+            var modal = document.getElementById('news-modal');
+            var mTitle = document.getElementById('modal-title');
+            var mText = document.getElementById('modal-text');
+            var mOk = document.getElementById('news-ok');
+            var mLater = document.getElementById('news-later');
+
+            // Регистрация Service Worker (нужен для уведомлений)
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('./sw.js').catch(function () {});
+            }
+
+            // OneSignal: включится сам, когда вставишь APP_ID ниже
+            var ONESIGNAL_APP_ID = ''; // <-- вставь сюда, напр. 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+            window.OneSignalDeferred = window.OneSignalDeferred || [];
+            window.OneSignalDeferred.push(function (OneSignal) {
+                if (!ONESIGNAL_APP_ID) return;
+                OneSignal.init({ appId: ONESIGNAL_APP_ID });
+            });
+
+            function showNews(title, text) {
+                bTitle.textContent = title;
+                bText.textContent = text;
+                mTitle.textContent = title;
+                mText.textContent = text;
+                banner.classList.add('show');
+                modal.classList.add('show');
+                // Локальное системное уведомление, если разрешение уже дано и вкладка открыта
+                try {
+                    if ('Notification' in window && Notification.permission === 'granted' && navigator.serviceWorker) {
+                        navigator.serviceWorker.getRegistration().then(function (reg) {
+                            if (reg) reg.showNotification(title, { body: text });
+                        });
+                    }
+                } catch (e) {}
+            }
+
+            bX.addEventListener('click', function () { banner.classList.remove('show'); });
+            mLater.addEventListener('click', function () { modal.classList.remove('show'); });
+            mOk.addEventListener('click', function () {
+                modal.classList.remove('show');
+                banner.classList.remove('show');
+                try { localStorage.setItem('letter_seen_v', String(latestVer)); } catch (e) {}
+                if (!isOpen) openSeq();
+            });
+
+            var latestVer = 0;
+            function checkNews() {
+                fetch('./message.json?v=' + Date.now(), { cache: 'no-store' })
+                    .then(function (r) { return r.ok ? r.json() : null; })
+                    .then(function (msg) {
+                        if (!msg || typeof msg.version !== 'number') return;
+                        latestVer = msg.version;
+                        var seen = 0;
+                        try { seen = parseInt(localStorage.getItem('letter_seen_v') || '0', 10) || 0; } catch (e) {}
+                        if (msg.version > seen) showNews(msg.title || '💌 Тебе новое сообщение!', msg.text || '');
+                    })
+                    .catch(function () {});
+            }
+
+            // Кнопка 🔔: запрос разрешения на уведомления (ей нажать 1 раз)
+            bell.addEventListener('click', function () {
+                if (!('Notification' in window)) {
+                    alert('Этот браузер не поддерживает уведомления. Просто открывай сайт — баннер всё равно покажет новое ❤️');
+                    return;
+                }
+                Notification.requestPermission().then(function (perm) {
+                    if (perm === 'granted') {
+                        bell.classList.add('on');
+                        bell.textContent = '🔔✓';
+                        try { new Notification('Уведомления включены 💌', { body: 'Теперь ты узнаешь о новых письмах первой ❤️' }); } catch (e) {}
+                    } else {
+                        alert('Разреши уведомления в настройках браузера, чтобы приходили пуши ❤️');
+                    }
+                });
+            });
+            try {
+                if ('Notification' in window && Notification.permission === 'granted') {
+                    bell.classList.add('on');
+                    bell.textContent = '🔔✓';
+                }
+            } catch (e) {}
+
+            checkNews();
+            setInterval(checkNews, 15000);
+        })();
     </script>
 </body>
 </html>
