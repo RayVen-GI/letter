@@ -555,6 +555,47 @@
         #news-modal .row button { flex: 1; padding: 12px; border-radius: 12px; border: none; font-size: 16px; cursor: pointer; }
         #news-ok { background: #ff5c8a; color: #fff; }
         #news-later { background: #ffe5ec; color: #c9184a; }
+        #news-mini { background: #ff5c8a; color: #fff; }
+        /* 💌 Мини-письмо: отдельное окно с текстом */
+        #mini-letter {
+            position: fixed;
+            inset: 0;
+            z-index: 450;
+            background: rgba(80,10,35,.65);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 18px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .3s ease;
+        }
+        #mini-letter.show { opacity: 1; pointer-events: auto; }
+        #mini-letter .card {
+            background: #fffdfd;
+            border-radius: 16px;
+            max-width: 420px;
+            width: 100%;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+            padding: 24px 22px;
+            border: 3px solid #ffb3c1;
+            outline: 2px dashed #ff8fab;
+            outline-offset: 6px;
+        }
+        #mini-letter h3 { margin: 0 0 10px; color: #c9184a; text-align: center; }
+        #mini-letter-text {
+            overflow-y: auto;
+            color: #4a4a4a;
+            font-size: 17px;
+            line-height: 1.7;
+            white-space: pre-line;
+            margin: 0;
+        }
+        #mini-letter .row { display: flex; gap: 10px; margin-top: 16px; }
+        #mini-letter-close { flex: 1; padding: 12px; border-radius: 12px; border: none; font-size: 16px; cursor: pointer; background: #ff5c8a; color: #fff; }
+        .inbox-item.openable { cursor: pointer; }
         /* ✉️ Инбокс: кнопка с бейджем + список всех уведомлений */
         #inbox-btn {
             position: fixed;
@@ -657,7 +698,17 @@
             <p id="modal-text">Открой письмо — там что-то новое для тебя ❤️</p>
             <div class="row">
                 <button id="news-ok">Прочитать</button>
+                <button id="news-mini" style="display:none">Открыть мини-письмо 💌</button>
                 <button id="news-later">Позже</button>
+            </div>
+        </div>
+    </div>
+    <div id="mini-letter" role="dialog" aria-modal="true" aria-label="Мини-письмо">
+        <div class="card">
+            <h3 id="mini-letter-title">💌</h3>
+            <p id="mini-letter-text"></p>
+            <div class="row">
+                <button id="mini-letter-close">Закрыть ❤️</button>
             </div>
         </div>
     </div>
@@ -918,6 +969,12 @@
             var mText = document.getElementById('modal-text');
             var mOk = document.getElementById('news-ok');
             var mLater = document.getElementById('news-later');
+            var mMini = document.getElementById('news-mini');
+            var miniLetter = document.getElementById('mini-letter');
+            var miniLetterTitle = document.getElementById('mini-letter-title');
+            var miniLetterText = document.getElementById('mini-letter-text');
+            var miniLetterClose = document.getElementById('mini-letter-close');
+            var currentMini = null;
             var inboxBtn = document.getElementById('inbox-btn');
             var inboxBadge = document.getElementById('inbox-badge');
             var inboxModal = document.getElementById('inbox-modal');
@@ -957,7 +1014,7 @@
                             var n = e.getNotification ? e.getNotification() : {};
                             addLocalLog({ title: n.title || '💌 Новое уведомление', text: n.body || '', date: today() });
                             renderInbox();
-                            showNews(n.title || '💌 Новое уведомление', n.body || '');
+                            showNews({ title: n.title || '💌 Новое уведомление', text: n.body || '' });
                         });
                     }
                 } catch (err) {}
@@ -994,7 +1051,7 @@
                 var out = [];
                 feed.forEach(function (x) {
                     var k = 'feed-' + x.id;
-                    if (!seenKeys[k]) { seenKeys[k] = 1; out.push({ key: k, id: x.id, title: x.title, text: x.text, date: x.date || '', unread: x.id > getSeen() }); }
+                    if (!seenKeys[k]) { seenKeys[k] = 1; out.push({ key: k, id: x.id, title: x.title, text: x.text || '', miniText: x.miniText || '', date: x.date || '', unread: x.id > getSeen() }); }
                 });
                 getLocalLog().forEach(function (x) {
                     var k = x.key || ('local-' + x.title + x.text);
@@ -1016,14 +1073,19 @@
                 }
                 items.forEach(function (x) {
                     var d = document.createElement('div');
-                    d.className = 'inbox-item' + (x.unread ? ' unread' : '');
+                    d.className = 'inbox-item' + (x.unread ? ' unread' : '') + (x.miniText ? ' openable' : '');
                     var b = document.createElement('b');
                     b.textContent = x.title;
                     var p = document.createElement('p');
-                    p.textContent = x.text;
+                    p.textContent = x.text || (x.miniText ? '💌 Там мини-письмо — нажми, чтобы открыть' : '');
                     var s = document.createElement('small');
                     s.textContent = x.date || '';
                     d.appendChild(b); d.appendChild(p); d.appendChild(s);
+                    if (x.miniText) {
+                        (function (entry) {
+                            d.addEventListener('click', function () { openMini(entry); });
+                        })(x);
+                    }
                     inboxList.appendChild(d);
                 });
                 updateBadge();
@@ -1039,23 +1101,45 @@
                 updateBadge();
             }
 
-            function showNews(title, text) {
+            function openMini(entry) {
+                if (!entry || !entry.miniText) return;
+                miniLetterTitle.textContent = entry.title || '💌 Мини-письмо';
+                miniLetterText.textContent = entry.miniText;
+                modal.classList.remove('show');
+                banner.classList.remove('show');
+                inboxModal.classList.remove('show');
+                miniLetter.classList.add('show');
+                markAllRead();
+                renderInbox();
+            }
+
+            function showNews(entry) {
+                var title = entry.title || '💌 Тебе новое сообщение!';
+                var text = entry.text || '';
+                var hasMini = !!entry.miniText;
+                currentMini = hasMini ? entry : null;
                 bTitle.textContent = title;
-                bText.textContent = text;
+                bText.textContent = text || (hasMini ? 'Там мини-письмо для тебя 💌' : '');
                 mTitle.textContent = title;
                 mText.textContent = text;
+                mText.style.display = text ? '' : 'none';
+                mOk.style.display = hasMini ? 'none' : '';
+                mMini.style.display = hasMini ? '' : 'none';
                 banner.classList.add('show');
                 modal.classList.add('show');
                 // Локальное системное уведомление, если разрешение уже дано и вкладка открыта
                 try {
                     if ('Notification' in window && Notification.permission === 'granted') {
-                        new Notification(title, { body: text });
+                        new Notification(title, { body: text || (hasMini ? 'Там мини-письмо для тебя 💌' : '') });
                     }
                 } catch (e) {}
             }
 
             bX.addEventListener('click', function () { banner.classList.remove('show'); });
             mLater.addEventListener('click', function () { modal.classList.remove('show'); });
+            mMini.addEventListener('click', function () { openMini(currentMini); });
+            miniLetterClose.addEventListener('click', function () { miniLetter.classList.remove('show'); });
+            miniLetter.addEventListener('click', function (e) { if (e.target === miniLetter) miniLetter.classList.remove('show'); });
             mOk.addEventListener('click', function () {
                 modal.classList.remove('show');
                 banner.classList.remove('show');
@@ -1082,7 +1166,7 @@
                         latestId = list.reduce(function (m, x) { return x.id > m ? x.id : m; }, 0);
                         if (latestId > getSeen()) {
                             var top = list.filter(function (x) { return x.id === latestId; })[0];
-                            if (top) showNews(top.title, top.text);
+                            if (top) showNews(top);
                         }
                         renderInbox();
                     })
