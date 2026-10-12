@@ -621,6 +621,21 @@
         }
         .reply-block button:disabled { opacity: .6; cursor: default; }
         .reply-status { font-size: 14px; color: #c9184a; text-align: center; min-height: 1.2em; }
+        /* 💬 Ответы: видны всем с любого устройства */
+        .answers { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+        .answers:empty { display: none; }
+        .answer {
+            background: #fff0f3;
+            border: 2px solid #ffb3c1;
+            border-radius: 12px;
+            padding: 8px 12px;
+            font-size: 14px;
+            color: #4a4a4a;
+            line-height: 1.5;
+            white-space: pre-line;
+            word-break: break-word;
+        }
+        .answer small { display: block; color: #b5838d; font-size: 12px; margin-top: 2px; }
         /* ✉️ Инбокс: кнопка с бейджем + список всех уведомлений */
         #inbox-btn {
             position: fixed;
@@ -695,6 +710,9 @@
     </style>
     <!-- OneSignal Web Push (для пуша на закрытый планшет). APP_ID вставить ниже, см. ONESIGNAL_SETUP.txt -->
     <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+    <!-- Firebase для общих ответов (видны с любого устройства). Настройки — config.json -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js" defer></script>
 </head>
 <body>
 
@@ -730,6 +748,7 @@
                 <textarea id="reply-text" rows="3" placeholder="Написать ответ… ❤️"></textarea>
                 <button id="reply-send">Отправить ответ 💌</button>
                 <div class="reply-status" id="reply-status"></div>
+                <div class="answers" id="answers"></div>
             </div>
         </div>
     </div>
@@ -741,6 +760,7 @@
                 <textarea id="reply-text2" rows="3" placeholder="Написать ответ… ❤️"></textarea>
                 <button id="reply-send2">Отправить ответ 💌</button>
                 <div class="reply-status" id="reply-status2"></div>
+                <div class="answers" id="answers2"></div>
             </div>
             <div class="row">
                 <button id="mini-letter-close">Закрыть ❤️</button>
@@ -1019,18 +1039,29 @@
             var replyArea2 = document.getElementById('reply-text2');
             var replySend2 = document.getElementById('reply-send2');
             var replyStatus2 = document.getElementById('reply-status2');
+            var answersBox = document.getElementById('answers');
+            var answersBox2 = document.getElementById('answers2');
 
-            /* 💬 Ответы летят тебе в Telegram через бота (настройки — config.json).
-               Пока токен не вписан, формы скрыты (класс noreply). */
-            var TG = { token: '', chat: '' };
+            /* 💬 Ответы хранятся в общей базе Firebase — видны в том же сообщении
+               с любого устройства. Настройки — config.json.
+               Пока база не настроена, формы скрыты (класс noreply). */
+            var DB = null;
+            var answersOff = null;
             document.body.classList.add('noreply');
+            function stopAnswers() {
+                try { if (answersOff) answersOff(); } catch (e) {}
+                answersOff = null;
+            }
             fetch('./config.json?v=' + Date.now(), { cache: 'no-store' })
                 .then(function (r) { return r.ok ? r.json() : null; })
                 .then(function (c) {
-                    if (c && c.telegramBotToken && c.telegramChatId) {
-                        TG.token = c.telegramBotToken;
-                        TG.chat = c.telegramChatId;
-                        document.body.classList.remove('noreply');
+                    var f = c && c.firebase;
+                    if (f && f.apiKey && f.databaseURL && window.firebase) {
+                        try {
+                            firebase.initializeApp(f);
+                            DB = firebase.database();
+                            document.body.classList.remove('noreply');
+                        } catch (e) { DB = null; }
                     }
                 })
                 .catch(function () {});
@@ -1050,30 +1081,45 @@
             function sendReply(entry, area, btn, statusEl) {
                 var text = area.value.trim();
                 if (!text) { statusEl.textContent = 'Напиши хоть пару слов ❤️'; return; }
-                if (!TG.token) { statusEl.textContent = 'Ответы пока не настроены 😔'; return; }
+                if (text.length > 500) { statusEl.textContent = 'Чуть короче, до 500 символов ❤️'; return; }
+                if (!DB) { statusEl.textContent = 'Ответы пока не настроены 😔'; return; }
                 btn.disabled = true;
                 statusEl.textContent = 'Отправляю…';
-                fetch('https://api.telegram.org/bot' + TG.token + '/sendMessage', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ chat_id: TG.chat, text: '💌 Ответ на «' + (entry.title || 'письмо') + '»:\n\n' + text })
-                })
-                .then(function (r) { return r.json(); })
-                .then(function (j) {
-                    if (j && j.ok) {
-                        try { localStorage.setItem(repliedKey(entry.id), '1'); } catch (e) {}
-                        area.disabled = true;
-                        btn.textContent = 'Ответ отправлен ❤️';
-                        statusEl.textContent = 'Доставлено! Он уже читает ❤️';
-                    } else {
-                        btn.disabled = false;
-                        statusEl.textContent = 'Не отправилось, попробуй ещё раз 😔';
-                    }
+                DB.ref('replies/' + entry.id).push({ text: text, date: new Date().toISOString() })
+                .then(function () {
+                    try { localStorage.setItem(repliedKey(entry.id), '1'); } catch (e) {}
+                    area.value = '';
+                    area.disabled = true;
+                    btn.textContent = 'Ответ отправлен ❤️';
+                    statusEl.textContent = 'Доставлено! Ответ теперь виден здесь ❤️';
                 })
                 .catch(function () {
                     btn.disabled = false;
                     statusEl.textContent = 'Нет связи, попробуй ещё раз 😔';
                 });
+            }
+            /* Подписка на ответы: показывает все ответы на это сообщение вживую */
+            function listenAnswers(entry, box) {
+                stopAnswers();
+                box.innerHTML = '';
+                if (!DB || !entry || !entry.reply || !entry.id) return;
+                var ref = DB.ref('replies/' + entry.id).orderByKey().limitToLast(20);
+                var cb = function (snap) {
+                    box.innerHTML = '';
+                    snap.forEach(function (ch) {
+                        var v = ch.val() || {};
+                        if (!v.text) return;
+                        var d = document.createElement('div');
+                        d.className = 'answer';
+                        d.textContent = v.text;
+                        var s = document.createElement('small');
+                        try { s.textContent = new Date(v.date).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch (e) { s.textContent = ''; }
+                        d.appendChild(s);
+                        box.appendChild(d);
+                    });
+                };
+                ref.on('value', cb);
+                answersOff = function () { try { ref.off('value', cb); } catch (e) {} };
             }
             replySend.addEventListener('click', function () { if (currentEntry) sendReply(currentEntry, replyArea, replySend, replyStatus); });
             replySend2.addEventListener('click', function () { if (currentMini) sendReply(currentMini, replyArea2, replySend2, replyStatus2); });
@@ -1212,6 +1258,7 @@
                 inboxModal.classList.remove('show');
                 miniLetter.classList.add('show');
                 bindReply(entry, replyArea2, replyBox2, replySend2, replyStatus2);
+                listenAnswers(entry, answersBox2);
                 markAllRead();
                 renderInbox();
             }
@@ -1230,6 +1277,7 @@
                 mMini.style.display = hasMini ? '' : 'none';
                 currentEntry = entry;
                 bindReply(entry, replyArea, replyBox, replySend, replyStatus);
+                listenAnswers(entry, answersBox);
                 banner.classList.add('show');
                 modal.classList.add('show');
                 // Локальное системное уведомление, если разрешение уже дано и вкладка открыта
@@ -1241,13 +1289,14 @@
             }
 
             bX.addEventListener('click', function () { banner.classList.remove('show'); });
-            mLater.addEventListener('click', function () { modal.classList.remove('show'); });
+            mLater.addEventListener('click', function () { modal.classList.remove('show'); stopAnswers(); });
             mMini.addEventListener('click', function () { openMini(currentMini); });
-            miniLetterClose.addEventListener('click', function () { miniLetter.classList.remove('show'); });
-            miniLetter.addEventListener('click', function (e) { if (e.target === miniLetter) miniLetter.classList.remove('show'); });
+            miniLetterClose.addEventListener('click', function () { miniLetter.classList.remove('show'); stopAnswers(); });
+            miniLetter.addEventListener('click', function (e) { if (e.target === miniLetter) { miniLetter.classList.remove('show'); stopAnswers(); } });
             mOk.addEventListener('click', function () {
                 modal.classList.remove('show');
                 banner.classList.remove('show');
+                stopAnswers();
                 markAllRead();
                 renderInbox();
             });

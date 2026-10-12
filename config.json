@@ -1,4 +1,8 @@
 {
-  "telegramBotToken": "",
-  "telegramChatId": ""
+  "firebase": {
+    "apiKey": "",
+    "authDomain": "",
+    "databaseURL": "",
+    "projectId": ""
+  }
 }
