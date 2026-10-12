@@ -596,6 +596,31 @@
         #mini-letter .row { display: flex; gap: 10px; margin-top: 16px; }
         #mini-letter-close { flex: 1; padding: 12px; border-radius: 12px; border: none; font-size: 16px; cursor: pointer; background: #ff5c8a; color: #fff; }
         .inbox-item.openable { cursor: pointer; }
+        /* 💬 Ответ: поле + кнопка в окне сообщения и в мини-письме */
+        .reply-block { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+        body.noreply .reply-block { display: none; }
+        .reply-block textarea {
+            width: 100%;
+            border: 2px solid #ffb3c1;
+            border-radius: 12px;
+            padding: 10px 12px;
+            font-size: 15px;
+            font-family: inherit;
+            resize: vertical;
+            color: #4a4a4a;
+        }
+        .reply-block textarea:focus { outline: 2px solid #ff8fab; border-color: #ff8fab; }
+        .reply-block button {
+            padding: 12px;
+            border-radius: 12px;
+            border: none;
+            font-size: 16px;
+            cursor: pointer;
+            background: #ff5c8a;
+            color: #fff;
+        }
+        .reply-block button:disabled { opacity: .6; cursor: default; }
+        .reply-status { font-size: 14px; color: #c9184a; text-align: center; min-height: 1.2em; }
         /* ✉️ Инбокс: кнопка с бейджем + список всех уведомлений */
         #inbox-btn {
             position: fixed;
@@ -701,12 +726,22 @@
                 <button id="news-mini" style="display:none">Открыть мини-письмо 💌</button>
                 <button id="news-later">Позже</button>
             </div>
+            <div class="reply-block" id="reply-block">
+                <textarea id="reply-text" rows="3" placeholder="Написать ответ… ❤️"></textarea>
+                <button id="reply-send">Отправить ответ 💌</button>
+                <div class="reply-status" id="reply-status"></div>
+            </div>
         </div>
     </div>
     <div id="mini-letter" role="dialog" aria-modal="true" aria-label="Мини-письмо">
         <div class="card">
             <h3 id="mini-letter-title">💌</h3>
             <p id="mini-letter-text"></p>
+            <div class="reply-block" id="reply-block2">
+                <textarea id="reply-text2" rows="3" placeholder="Написать ответ… ❤️"></textarea>
+                <button id="reply-send2">Отправить ответ 💌</button>
+                <div class="reply-status" id="reply-status2"></div>
+            </div>
             <div class="row">
                 <button id="mini-letter-close">Закрыть ❤️</button>
             </div>
@@ -975,6 +1010,73 @@
             var miniLetterText = document.getElementById('mini-letter-text');
             var miniLetterClose = document.getElementById('mini-letter-close');
             var currentMini = null;
+            var currentEntry = null;
+            var replyBox = document.getElementById('reply-block');
+            var replyArea = document.getElementById('reply-text');
+            var replySend = document.getElementById('reply-send');
+            var replyStatus = document.getElementById('reply-status');
+            var replyBox2 = document.getElementById('reply-block2');
+            var replyArea2 = document.getElementById('reply-text2');
+            var replySend2 = document.getElementById('reply-send2');
+            var replyStatus2 = document.getElementById('reply-status2');
+
+            /* 💬 Ответы летят тебе в Telegram через бота (настройки — config.json).
+               Пока токен не вписан, формы скрыты (класс noreply). */
+            var TG = { token: '', chat: '' };
+            document.body.classList.add('noreply');
+            fetch('./config.json?v=' + Date.now(), { cache: 'no-store' })
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (c) {
+                    if (c && c.telegramBotToken && c.telegramChatId) {
+                        TG.token = c.telegramBotToken;
+                        TG.chat = c.telegramChatId;
+                        document.body.classList.remove('noreply');
+                    }
+                })
+                .catch(function () {});
+
+            function repliedKey(id) { return 'letter_replied_' + id; }
+            function bindReply(entry, area, box, btn, statusEl) {
+                if (!entry || !entry.reply || !entry.id) { box.style.display = 'none'; return; }
+                var done = false;
+                try { done = localStorage.getItem(repliedKey(entry.id)) === '1'; } catch (e) {}
+                box.style.display = '';
+                area.value = '';
+                area.disabled = done;
+                btn.disabled = done;
+                btn.textContent = done ? 'Ответ отправлен ❤️' : 'Отправить ответ 💌';
+                statusEl.textContent = done ? 'Ответ уже отправлен ❤️' : '';
+            }
+            function sendReply(entry, area, btn, statusEl) {
+                var text = area.value.trim();
+                if (!text) { statusEl.textContent = 'Напиши хоть пару слов ❤️'; return; }
+                if (!TG.token) { statusEl.textContent = 'Ответы пока не настроены 😔'; return; }
+                btn.disabled = true;
+                statusEl.textContent = 'Отправляю…';
+                fetch('https://api.telegram.org/bot' + TG.token + '/sendMessage', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chat_id: TG.chat, text: '💌 Ответ на «' + (entry.title || 'письмо') + '»:\n\n' + text })
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (j) {
+                    if (j && j.ok) {
+                        try { localStorage.setItem(repliedKey(entry.id), '1'); } catch (e) {}
+                        area.disabled = true;
+                        btn.textContent = 'Ответ отправлен ❤️';
+                        statusEl.textContent = 'Доставлено! Он уже читает ❤️';
+                    } else {
+                        btn.disabled = false;
+                        statusEl.textContent = 'Не отправилось, попробуй ещё раз 😔';
+                    }
+                })
+                .catch(function () {
+                    btn.disabled = false;
+                    statusEl.textContent = 'Нет связи, попробуй ещё раз 😔';
+                });
+            }
+            replySend.addEventListener('click', function () { if (currentEntry) sendReply(currentEntry, replyArea, replySend, replyStatus); });
+            replySend2.addEventListener('click', function () { if (currentMini) sendReply(currentMini, replyArea2, replySend2, replyStatus2); });
             var inboxBtn = document.getElementById('inbox-btn');
             var inboxBadge = document.getElementById('inbox-badge');
             var inboxModal = document.getElementById('inbox-modal');
@@ -1109,6 +1211,7 @@
                 banner.classList.remove('show');
                 inboxModal.classList.remove('show');
                 miniLetter.classList.add('show');
+                bindReply(entry, replyArea2, replyBox2, replySend2, replyStatus2);
                 markAllRead();
                 renderInbox();
             }
@@ -1125,6 +1228,8 @@
                 mText.style.display = text ? '' : 'none';
                 mOk.style.display = hasMini ? 'none' : '';
                 mMini.style.display = hasMini ? '' : 'none';
+                currentEntry = entry;
+                bindReply(entry, replyArea, replyBox, replySend, replyStatus);
                 banner.classList.add('show');
                 modal.classList.add('show');
                 // Локальное системное уведомление, если разрешение уже дано и вкладка открыта
