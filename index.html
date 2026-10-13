@@ -623,7 +623,9 @@
             font-size: 16px;
             line-height: 1.65;
             white-space: pre-line;
-            max-height: 36vh;
+            flex: 1;
+            min-height: 0;
+            max-height: 60vh;
             word-break: break-word;
         }
         .reader-side {
@@ -636,7 +638,8 @@
             padding-left: 14px;
         }
         .reader-side h4 { margin: 0 0 8px; color: #c9184a; font-size: 15px; text-align: center; }
-        #reader-list { overflow-y: auto; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+        #reader-list { overflow-y: auto; flex: 1; min-height: 60px; display: flex; flex-direction: column; gap: 8px; }
+        #reader-answers { flex: 0 0 auto; }
         #reader-list .inbox-item b { font-size: 13px; }
         #reader-list .inbox-item p { font-size: 12px; }
         #reader-list .inbox-item.active { border-color: #ff5c8a; background: #fff0f3; }
@@ -880,16 +883,16 @@
             <div class="reader-main">
                 <h3 id="reader-title">💌</h3>
                 <div id="reader-body"></div>
+            </div>
+            <div class="reader-side">
+                <h4>✉️ Сообщения</h4>
+                <div id="reader-list"></div>
                 <div class="answers" id="reader-answers"></div>
                 <div class="reply-block" id="reply-block4">
                     <textarea id="reply-text4" rows="3" placeholder="Написать ответ… ❤️"></textarea>
                     <button id="reply-send4">Отправить ответ 💌</button>
                     <div class="reply-status" id="reply-status4"></div>
                 </div>
-            </div>
-            <div class="reader-side">
-                <h4>✉️ Сообщения</h4>
-                <div id="reader-list"></div>
                 <button id="reader-close">Закрыть ❤️</button>
             </div>
         </div>
@@ -1219,7 +1222,7 @@
                 area.disabled = done;
                 btn.disabled = done;
                 btn.textContent = done ? 'Ответ отправлен ❤️' : 'Отправить ответ 💌';
-                statusEl.textContent = done ? 'Ответ уже отправлен ❤️' : '';
+                statusEl.textContent = '';
             }
             var currentAnswersEntry = null;
             var currentAnswersBox = null;
