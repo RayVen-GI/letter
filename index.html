@@ -1414,7 +1414,8 @@
                     var b = document.createElement('b');
                     b.textContent = x.title;
                     var p = document.createElement('p');
-                    p.textContent = x.text || (x.miniText ? '💌 Там мини-письмо — нажми, чтобы открыть' : '');
+                    var full = x.text || (x.miniText ? '💌 Там мини-письмо — нажми, чтобы открыть' : '');
+                    p.textContent = full.length > 80 ? full.slice(0, 80) + '…' : full;
                     var s = document.createElement('small');
                     s.textContent = x.date || '';
                     d.appendChild(b); d.appendChild(p); d.appendChild(s);
