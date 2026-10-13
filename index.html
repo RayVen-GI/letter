@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="data:,">
     <title>Тебе письмо! ❤️</title>
     <style>
         * { box-sizing: border-box; }
@@ -1047,24 +1048,38 @@
                Пока база не настроена, формы скрыты (класс noreply). */
             var DB = null;
             var answersOff = null;
+            var FB_CFG = null;
             document.body.classList.add('noreply');
             function stopAnswers() {
                 try { if (answersOff) answersOff(); } catch (e) {}
                 answersOff = null;
             }
+            /* SDK грузится через defer и может опоздать — пробуем несколько раз */
+            function tryInitFirebase() {
+                if (DB) return true;
+                var f = FB_CFG && FB_CFG.firebase;
+                if (f && f.apiKey && f.databaseURL && window.firebase && window.firebase.database) {
+                    try {
+                        firebase.initializeApp(f);
+                        DB = firebase.database();
+                        document.body.classList.remove('noreply');
+                        return true;
+                    } catch (e) { console.warn('Firebase init failed', e); }
+                }
+                return false;
+            }
             fetch('./config.json?v=' + Date.now(), { cache: 'no-store' })
                 .then(function (r) { return r.ok ? r.json() : null; })
                 .then(function (c) {
-                    var f = c && c.firebase;
-                    if (f && f.apiKey && f.databaseURL && window.firebase) {
-                        try {
-                            firebase.initializeApp(f);
-                            DB = firebase.database();
-                            document.body.classList.remove('noreply');
-                        } catch (e) { DB = null; }
-                    }
+                    FB_CFG = c;
+                    tryInitFirebase();
                 })
                 .catch(function () {});
+            window.addEventListener('load', function () {
+                tryInitFirebase();
+                setTimeout(tryInitFirebase, 1500);
+                setTimeout(tryInitFirebase, 4000);
+            });
 
             function repliedKey(id) { return 'letter_replied_' + id; }
             function bindReply(entry, area, box, btn, statusEl) {
