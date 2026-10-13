@@ -557,6 +557,36 @@
         #news-ok { background: #ff5c8a; color: #fff; }
         #news-later { background: #ffe5ec; color: #c9184a; }
         #news-mini { background: #ff5c8a; color: #fff; }
+        /* 💬 Просмотр обычного сообщения из списка */
+        #msg-view {
+            position: fixed;
+            inset: 0;
+            z-index: 450;
+            background: rgba(80,10,35,.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 18px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .3s ease;
+        }
+        #msg-view.show { opacity: 1; pointer-events: auto; }
+        #msg-view .card {
+            background: #fff;
+            border-radius: 16px;
+            max-width: 440px;
+            width: 100%;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+            padding: 22px;
+            border: 3px solid #ffb3c1;
+        }
+        #msg-view h3 { margin: 0 0 10px; color: #c9184a; text-align: center; }
+        #msg-view-text { overflow-y: auto; color: #4a4a4a; font-size: 16px; line-height: 1.65; margin: 0; white-space: pre-line; }
+        #msg-view .row { display: flex; gap: 10px; margin-top: 14px; }
+        #msg-view-close { flex: 1; padding: 12px; border-radius: 12px; border: none; font-size: 16px; cursor: pointer; background: #ff5c8a; color: #fff; }
         /* 💌 Мини-письмо: отдельное окно с текстом */
         #mini-letter {
             position: fixed;
@@ -762,6 +792,21 @@
             </div>
             <div class="row">
                 <button id="mini-letter-close">Закрыть ❤️</button>
+            </div>
+        </div>
+    </div>
+    <div id="msg-view" role="dialog" aria-modal="true" aria-label="Сообщение">
+        <div class="card">
+            <h3 id="msg-view-title">💌</h3>
+            <p id="msg-view-text"></p>
+            <div class="reply-block" id="reply-block3">
+                <textarea id="reply-text3" rows="3" placeholder="Написать ответ… ❤️"></textarea>
+                <button id="reply-send3">Отправить ответ 💌</button>
+                <div class="reply-status" id="reply-status3"></div>
+                <div class="answers" id="answers3"></div>
+            </div>
+            <div class="row">
+                <button id="msg-view-close">Закрыть ❤️</button>
             </div>
         </div>
     </div>
@@ -1039,6 +1084,15 @@
             var replyStatus2 = document.getElementById('reply-status2');
             var answersBox = document.getElementById('answers');
             var answersBox2 = document.getElementById('answers2');
+            var msgView = document.getElementById('msg-view');
+            var msgViewTitle = document.getElementById('msg-view-title');
+            var msgViewText = document.getElementById('msg-view-text');
+            var msgViewClose = document.getElementById('msg-view-close');
+            var replyBox3 = document.getElementById('reply-block3');
+            var replyArea3 = document.getElementById('reply-text3');
+            var replySend3 = document.getElementById('reply-send3');
+            var replyStatus3 = document.getElementById('reply-status3');
+            var answersBox3 = document.getElementById('answers3');
 
             /* 💬 Ответы хранятся в общей базе Firebase — видны в том же сообщении
                с любого устройства. Работаем через REST API прямыми запросами,
@@ -1138,6 +1192,7 @@
             function listenAnswers(entry, box) { loadAnswers(entry, box); }
             replySend.addEventListener('click', function () { if (currentEntry) sendReply(currentEntry, replyArea, replySend, replyStatus); });
             replySend2.addEventListener('click', function () { if (currentMini) sendReply(currentMini, replyArea2, replySend2, replyStatus2); });
+            replySend3.addEventListener('click', function () { if (currentEntry) sendReply(currentEntry, replyArea3, replySend3, replyStatus3); });
             var inboxBtn = document.getElementById('inbox-btn');
             var inboxBadge = document.getElementById('inbox-badge');
             var inboxModal = document.getElementById('inbox-modal');
@@ -1214,7 +1269,7 @@
                 var out = [];
                 feed.forEach(function (x) {
                     var k = 'feed-' + x.id;
-                    if (!seenKeys[k]) { seenKeys[k] = 1; out.push({ key: k, id: x.id, title: x.title, text: x.text || '', miniText: x.miniText || '', date: x.date || '', unread: x.id > getSeen() }); }
+                    if (!seenKeys[k]) { seenKeys[k] = 1; out.push({ key: k, id: x.id, title: x.title, text: x.text || '', miniText: x.miniText || '', reply: !!x.reply, date: x.date || '', unread: x.id > getSeen() }); }
                 });
                 getLocalLog().forEach(function (x) {
                     var k = x.key || ('local-' + x.title + x.text);
@@ -1236,7 +1291,7 @@
                 }
                 items.forEach(function (x) {
                     var d = document.createElement('div');
-                    d.className = 'inbox-item' + (x.unread ? ' unread' : '') + (x.miniText ? ' openable' : '');
+                    d.className = 'inbox-item' + (x.unread ? ' unread' : '') + (x.reply ? ' openable' : '');
                     var b = document.createElement('b');
                     b.textContent = x.title;
                     var p = document.createElement('p');
@@ -1244,9 +1299,9 @@
                     var s = document.createElement('small');
                     s.textContent = x.date || '';
                     d.appendChild(b); d.appendChild(p); d.appendChild(s);
-                    if (x.miniText) {
+                    if (x.reply) {
                         (function (entry) {
-                            d.addEventListener('click', function () { openMini(entry); });
+                            d.addEventListener('click', function () { if (entry.miniText) openMini(entry); else openMessage(entry); });
                         })(x);
                     }
                     inboxList.appendChild(d);
@@ -1308,6 +1363,22 @@
             mMini.addEventListener('click', function () { openMini(currentMini); });
             miniLetterClose.addEventListener('click', function () { miniLetter.classList.remove('show'); stopAnswers(); });
             miniLetter.addEventListener('click', function (e) { if (e.target === miniLetter) { miniLetter.classList.remove('show'); stopAnswers(); } });
+            /* Просмотр обычного сообщения из списка: текст + форма + ответы */
+            function openMessage(entry) {
+                if (!entry) return;
+                currentEntry = entry;
+                msgViewTitle.textContent = entry.title || '💌 Сообщение';
+                msgViewText.textContent = entry.text || '';
+                msgViewText.style.display = entry.text ? '' : 'none';
+                inboxModal.classList.remove('show');
+                msgView.classList.add('show');
+                bindReply(entry, replyArea3, replyBox3, replySend3, replyStatus3);
+                listenAnswers(entry, answersBox3);
+                markAllRead();
+                renderInbox();
+            }
+            msgViewClose.addEventListener('click', function () { msgView.classList.remove('show'); stopAnswers(); });
+            msgView.addEventListener('click', function (e) { if (e.target === msgView) { msgView.classList.remove('show'); stopAnswers(); } });
             mOk.addEventListener('click', function () {
                 modal.classList.remove('show');
                 banner.classList.remove('show');
@@ -1340,6 +1411,7 @@
                         renderInbox();
                         if (modal.classList.contains('show') && currentEntry) loadAnswers(currentEntry, answersBox);
                         else if (miniLetter.classList.contains('show') && currentMini) loadAnswers(currentMini, answersBox2);
+                        else if (msgView.classList.contains('show') && currentEntry) loadAnswers(currentEntry, answersBox3);
                     })
                     .catch(function () {});
             }
