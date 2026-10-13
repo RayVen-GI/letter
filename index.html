@@ -630,6 +630,7 @@
         }
         .reader-mid h4 { margin: 0 0 8px; color: #c9184a; font-size: 15px; text-align: center; }
         .reader-mid .answers { flex: 1; min-height: 80px; max-height: none; }
+        .reader-mid .reply-block { flex: 0 0 auto; margin-top: 8px; }
         #reader-body {
             overflow-y: auto;
             color: #4a4a4a;
@@ -902,15 +903,15 @@
             <div class="reader-mid">
                 <h4>💬 Ответы</h4>
                 <div class="answers" id="reader-answers"></div>
-            </div>
-            <div class="reader-side">
-                <h4>✉️ Сообщения</h4>
-                <div id="reader-list"></div>
                 <div class="reply-block" id="reply-block4">
                     <textarea id="reply-text4" rows="3" placeholder="Написать ответ… ❤️"></textarea>
                     <button id="reply-send4">Отправить ответ 💌</button>
                     <div class="reply-status" id="reply-status4"></div>
                 </div>
+            </div>
+            <div class="reader-side">
+                <h4>✉️ Сообщения</h4>
+                <div id="reader-list"></div>
                 <button id="reader-close">Закрыть ❤️</button>
             </div>
         </div>
