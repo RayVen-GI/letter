@@ -1,8 +1,8 @@
 {
   "firebase": {
-    "apiKey": "",
-    "authDomain": "",
-    "databaseURL": "",
-    "projectId": ""
+    "apiKey": "AIzaSyC1q01OlF8bQ-LiHEKZIYoIpFclG5Jr0LA",
+    "authDomain": "letter-6e0ae.firebaseapp.com",
+    "databaseURL": "https://letter-6e0ae-default-rtdb.europe-west1.firebasedatabase.app",
+    "projectId": "letter-6e0ae"
   }
 }
