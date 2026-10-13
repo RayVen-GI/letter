@@ -617,6 +617,19 @@
         }
         .reader-main { flex: 1.3; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
         .reader-main h3 { margin: 0 0 10px; color: #c9184a; text-align: center; }
+        /* Средняя колонка: ответы между сообщением и списком */
+        .reader-mid {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            border-left: 2px dashed #ffc2d1;
+            border-right: 2px dashed #ffc2d1;
+            padding: 0 14px;
+        }
+        .reader-mid h4 { margin: 0 0 8px; color: #c9184a; font-size: 15px; text-align: center; }
+        .reader-mid .answers { flex: 1; min-height: 80px; max-height: none; }
         #reader-body {
             overflow-y: auto;
             color: #4a4a4a;
@@ -646,11 +659,13 @@
         #reader-close { margin-top: 10px; padding: 12px; border-radius: 12px; border: none; font-size: 16px; cursor: pointer; background: #ffe5ec; color: #c9184a; }
         /* Ответы всегда в своем скроллящемся окне — не закрывают сообщение */
         .answers { max-height: 26vh; overflow-y: auto; }
-        /* 📱 Телефон: всё в столбик */
+        /* 📱 Телефон: список прячем — только сообщение, ответы и форма */
         @media (max-width: 700px) {
             #reader .card { flex-direction: column; gap: 12px; max-height: 88vh; overflow-y: auto; }
+            .reader-mid { border-left: none; border-right: none; border-top: 2px dashed #ffc2d1; padding: 10px 0 0; }
+            .reader-mid .answers { max-height: 24vh; flex: 0 0 auto; }
             .reader-side { width: auto; border-left: none; border-top: 2px dashed #ffc2d1; padding-left: 0; padding-top: 10px; }
-            #reader-list { max-height: 24vh; flex: 0 0 auto; }
+            .reader-side h4, #reader-list { display: none; }
             #reader-body { max-height: 30vh; }
             .answers { max-height: 24vh; }
         }
@@ -884,10 +899,13 @@
                 <h3 id="reader-title">💌</h3>
                 <div id="reader-body"></div>
             </div>
+            <div class="reader-mid">
+                <h4>💬 Ответы</h4>
+                <div class="answers" id="reader-answers"></div>
+            </div>
             <div class="reader-side">
                 <h4>✉️ Сообщения</h4>
                 <div id="reader-list"></div>
-                <div class="answers" id="reader-answers"></div>
                 <div class="reply-block" id="reply-block4">
                     <textarea id="reply-text4" rows="3" placeholder="Написать ответ… ❤️"></textarea>
                     <button id="reply-send4">Отправить ответ 💌</button>
@@ -1519,8 +1537,14 @@
                 markAllRead();
                 renderInbox();
             }
-            readerClose.addEventListener('click', function () { reader.classList.remove('show'); stopAnswers(); });
-            reader.addEventListener('click', function (e) { if (e.target === reader) { reader.classList.remove('show'); stopAnswers(); } });
+            function closeReader() {
+                reader.classList.remove('show');
+                stopAnswers();
+                renderInbox();
+                inboxModal.classList.add('show');
+            }
+            readerClose.addEventListener('click', closeReader);
+            reader.addEventListener('click', function (e) { if (e.target === reader) closeReader(); });
             mOk.addEventListener('click', function () {
                 modal.classList.remove('show');
                 banner.classList.remove('show');
