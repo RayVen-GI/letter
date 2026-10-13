@@ -587,6 +587,70 @@
         #msg-view-text { overflow-y: auto; color: #4a4a4a; font-size: 16px; line-height: 1.65; margin: 0; white-space: pre-line; }
         #msg-view .row { display: flex; gap: 10px; margin-top: 14px; }
         #msg-view-close { flex: 1; padding: 12px; border-radius: 12px; border: none; font-size: 16px; cursor: pointer; background: #ff5c8a; color: #fff; }
+        /* 📖 Ридер: слева сообщение, справа список + ответ (ПК и планшет) */
+        #reader {
+            position: fixed;
+            inset: 0;
+            z-index: 460;
+            background: rgba(80,10,35,.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 18px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .3s ease;
+        }
+        #reader.show { opacity: 1; pointer-events: auto; }
+        #reader .card {
+            background: #fff;
+            border-radius: 16px;
+            max-width: 920px;
+            width: 100%;
+            max-height: 86vh;
+            display: flex;
+            flex-direction: row;
+            gap: 16px;
+            padding: 22px;
+            border: 3px solid #ffb3c1;
+            overflow: hidden;
+        }
+        .reader-main { flex: 1.3; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+        .reader-main h3 { margin: 0 0 10px; color: #c9184a; text-align: center; }
+        #reader-body {
+            overflow-y: auto;
+            color: #4a4a4a;
+            font-size: 16px;
+            line-height: 1.65;
+            white-space: pre-line;
+            max-height: 36vh;
+            word-break: break-word;
+        }
+        .reader-side {
+            width: 270px;
+            flex: 0 0 auto;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            border-left: 2px dashed #ffc2d1;
+            padding-left: 14px;
+        }
+        .reader-side h4 { margin: 0 0 8px; color: #c9184a; font-size: 15px; text-align: center; }
+        #reader-list { overflow-y: auto; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+        #reader-list .inbox-item b { font-size: 13px; }
+        #reader-list .inbox-item p { font-size: 12px; }
+        #reader-list .inbox-item.active { border-color: #ff5c8a; background: #fff0f3; }
+        #reader-close { margin-top: 10px; padding: 12px; border-radius: 12px; border: none; font-size: 16px; cursor: pointer; background: #ffe5ec; color: #c9184a; }
+        /* Ответы всегда в своем скроллящемся окне — не закрывают сообщение */
+        .answers { max-height: 26vh; overflow-y: auto; }
+        /* 📱 Телефон: всё в столбик */
+        @media (max-width: 700px) {
+            #reader .card { flex-direction: column; gap: 12px; max-height: 88vh; overflow-y: auto; }
+            .reader-side { width: auto; border-left: none; border-top: 2px dashed #ffc2d1; padding-left: 0; padding-top: 10px; }
+            #reader-list { max-height: 24vh; flex: 0 0 auto; }
+            #reader-body { max-height: 30vh; }
+            .answers { max-height: 24vh; }
+        }
         /* 💌 Мини-письмо: отдельное окно с текстом */
         #mini-letter {
             position: fixed;
@@ -807,6 +871,26 @@
             </div>
             <div class="row">
                 <button id="msg-view-close">Закрыть ❤️</button>
+            </div>
+        </div>
+    </div>
+    <!-- 📖 Ридер: слева сообщение, справа список + ответ -->
+    <div id="reader" role="dialog" aria-modal="true" aria-label="Сообщение">
+        <div class="card">
+            <div class="reader-main">
+                <h3 id="reader-title">💌</h3>
+                <div id="reader-body"></div>
+                <div class="answers" id="reader-answers"></div>
+                <div class="reply-block" id="reply-block4">
+                    <textarea id="reply-text4" rows="3" placeholder="Написать ответ… ❤️"></textarea>
+                    <button id="reply-send4">Отправить ответ 💌</button>
+                    <div class="reply-status" id="reply-status4"></div>
+                </div>
+            </div>
+            <div class="reader-side">
+                <h4>✉️ Сообщения</h4>
+                <div id="reader-list"></div>
+                <button id="reader-close">Закрыть ❤️</button>
             </div>
         </div>
     </div>
@@ -1093,6 +1177,16 @@
             var replySend3 = document.getElementById('reply-send3');
             var replyStatus3 = document.getElementById('reply-status3');
             var answersBox3 = document.getElementById('answers3');
+            var reader = document.getElementById('reader');
+            var readerTitle = document.getElementById('reader-title');
+            var readerBody = document.getElementById('reader-body');
+            var readerList = document.getElementById('reader-list');
+            var readerClose = document.getElementById('reader-close');
+            var replyBox4 = document.getElementById('reply-block4');
+            var replyArea4 = document.getElementById('reply-text4');
+            var replySend4 = document.getElementById('reply-send4');
+            var replyStatus4 = document.getElementById('reply-status4');
+            var readerAnswers = document.getElementById('reader-answers');
 
             /* 💬 Ответы хранятся в общей базе Firebase — видны в том же сообщении
                с любого устройства. Работаем через REST API прямыми запросами,
@@ -1193,6 +1287,7 @@
             replySend.addEventListener('click', function () { if (currentEntry) sendReply(currentEntry, replyArea, replySend, replyStatus); else replyStatus.textContent = 'Обнови страницу и попробуй ещё раз 😔'; });
             replySend2.addEventListener('click', function () { if (currentMini) sendReply(currentMini, replyArea2, replySend2, replyStatus2); else replyStatus2.textContent = 'Обнови страницу и попробуй ещё раз 😔'; });
             replySend3.addEventListener('click', function () { if (currentEntry) sendReply(currentEntry, replyArea3, replySend3, replyStatus3); else replyStatus3.textContent = 'Обнови страницу и попробуй ещё раз 😔'; });
+            replySend4.addEventListener('click', function () { if (currentEntry) sendReply(currentEntry, replyArea4, replySend4, replyStatus4); else replyStatus4.textContent = 'Обнови страницу и попробуй ещё раз 😔'; });
             var inboxBtn = document.getElementById('inbox-btn');
             var inboxBadge = document.getElementById('inbox-badge');
             var inboxModal = document.getElementById('inbox-modal');
@@ -1301,7 +1396,7 @@
                     d.appendChild(b); d.appendChild(p); d.appendChild(s);
                     if (x.reply) {
                         (function (entry) {
-                            d.addEventListener('click', function () { if (entry.miniText) openMini(entry); else openMessage(entry); });
+                            d.addEventListener('click', function () { openReader(entry); });
                         })(x);
                     }
                     inboxList.appendChild(d);
@@ -1380,6 +1475,49 @@
             }
             msgViewClose.addEventListener('click', function () { msgView.classList.remove('show'); stopAnswers(); });
             msgView.addEventListener('click', function (e) { if (e.target === msgView) { msgView.classList.remove('show'); stopAnswers(); } });
+            /* 📖 Ридер: слева сообщение, справа список + ответ */
+            function renderReaderList() {
+                var items = allEntries();
+                readerList.innerHTML = '';
+                items.forEach(function (x) {
+                    var d = document.createElement('div');
+                    var active = currentEntry && x.id && currentEntry.id && x.id === currentEntry.id;
+                    d.className = 'inbox-item' + (x.unread ? ' unread' : '') + (active ? ' active' : '');
+                    var b = document.createElement('b');
+                    b.textContent = x.title;
+                    var p = document.createElement('p');
+                    var snip = x.miniText ? '💌 Мини-письмо — нажми, чтобы открыть' : (x.text || '');
+                    p.textContent = snip.length > 70 ? snip.slice(0, 70) + '…' : snip;
+                    var s = document.createElement('small');
+                    s.textContent = x.date || '';
+                    d.appendChild(b); d.appendChild(p); d.appendChild(s);
+                    (function (entry) {
+                        d.addEventListener('click', function () { openReader(entry); });
+                    })(x);
+                    readerList.appendChild(d);
+                });
+            }
+            function openReader(entry) {
+                if (!entry) return;
+                currentEntry = entry;
+                currentMini = entry.miniText ? entry : null;
+                readerTitle.textContent = entry.title || '💌 Сообщение';
+                readerBody.textContent = entry.miniText || entry.text || '';
+                inboxModal.classList.remove('show');
+                msgView.classList.remove('show');
+                miniLetter.classList.remove('show');
+                modal.classList.remove('show');
+                banner.classList.remove('show');
+                stopAnswers();
+                reader.classList.add('show');
+                bindReply(entry, replyArea4, replyBox4, replySend4, replyStatus4);
+                listenAnswers(entry, readerAnswers);
+                renderReaderList();
+                markAllRead();
+                renderInbox();
+            }
+            readerClose.addEventListener('click', function () { reader.classList.remove('show'); stopAnswers(); });
+            reader.addEventListener('click', function (e) { if (e.target === reader) { reader.classList.remove('show'); stopAnswers(); } });
             mOk.addEventListener('click', function () {
                 modal.classList.remove('show');
                 banner.classList.remove('show');
@@ -1413,6 +1551,7 @@
                         if (modal.classList.contains('show') && currentEntry) loadAnswers(currentEntry, answersBox);
                         else if (miniLetter.classList.contains('show') && currentMini) loadAnswers(currentMini, answersBox2);
                         else if (msgView.classList.contains('show') && currentEntry) loadAnswers(currentEntry, answersBox3);
+                        else if (reader.classList.contains('show') && currentEntry) loadAnswers(currentEntry, readerAnswers);
                     })
                     .catch(function () {});
             }
