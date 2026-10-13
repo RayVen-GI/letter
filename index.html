@@ -711,9 +711,6 @@
     </style>
     <!-- OneSignal Web Push (для пуша на закрытый планшет). APP_ID вставить ниже, см. ONESIGNAL_SETUP.txt -->
     <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
-    <!-- Firebase для общих ответов (видны с любого устройства). Настройки — config.json -->
-    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" defer></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js" defer></script>
 </head>
 <body>
 
@@ -1044,42 +1041,25 @@
             var answersBox2 = document.getElementById('answers2');
 
             /* 💬 Ответы хранятся в общей базе Firebase — видны в том же сообщении
-               с любого устройства. Настройки — config.json.
+               с любого устройства. Работаем через REST API прямыми запросами,
+               без SDK (нечему ломаться и нечего блокировать). Настройки — config.json.
                Пока база не настроена, формы скрыты (класс noreply). */
             var DB = null;
-            var answersOff = null;
-            var FB_CFG = null;
             document.body.classList.add('noreply');
             function stopAnswers() {
-                try { if (answersOff) answersOff(); } catch (e) {}
-                answersOff = null;
-            }
-            /* SDK грузится через defer и может опоздать — пробуем несколько раз */
-            function tryInitFirebase() {
-                if (DB) return true;
-                var f = FB_CFG && FB_CFG.firebase;
-                if (f && f.apiKey && f.databaseURL && window.firebase && window.firebase.database) {
-                    try {
-                        firebase.initializeApp(f);
-                        DB = firebase.database();
-                        document.body.classList.remove('noreply');
-                        return true;
-                    } catch (e) { console.warn('Firebase init failed', e); }
-                }
-                return false;
+                currentAnswersEntry = null;
+                currentAnswersBox = null;
             }
             fetch('./config.json?v=' + Date.now(), { cache: 'no-store' })
                 .then(function (r) { return r.ok ? r.json() : null; })
                 .then(function (c) {
-                    FB_CFG = c;
-                    tryInitFirebase();
+                    var f = c && c.firebase;
+                    if (f && f.databaseURL) {
+                        DB = { base: String(f.databaseURL).replace(/\/+$/, '') };
+                        document.body.classList.remove('noreply');
+                    }
                 })
                 .catch(function () {});
-            window.addEventListener('load', function () {
-                tryInitFirebase();
-                setTimeout(tryInitFirebase, 1500);
-                setTimeout(tryInitFirebase, 4000);
-            });
 
             function repliedKey(id) { return 'letter_replied_' + id; }
             function bindReply(entry, area, box, btn, statusEl) {
@@ -1093,6 +1073,8 @@
                 btn.textContent = done ? 'Ответ отправлен ❤️' : 'Отправить ответ 💌';
                 statusEl.textContent = done ? 'Ответ уже отправлен ❤️' : '';
             }
+            var currentAnswersEntry = null;
+            var currentAnswersBox = null;
             function sendReply(entry, area, btn, statusEl) {
                 var text = area.value.trim();
                 if (!text) { statusEl.textContent = 'Напиши хоть пару слов ❤️'; return; }
@@ -1100,42 +1082,60 @@
                 if (!DB) { statusEl.textContent = 'Ответы пока не настроены 😔'; return; }
                 btn.disabled = true;
                 statusEl.textContent = 'Отправляю…';
-                DB.ref('replies/' + entry.id).push({ text: text, date: new Date().toISOString() })
-                .then(function () {
-                    try { localStorage.setItem(repliedKey(entry.id), '1'); } catch (e) {}
-                    area.value = '';
-                    area.disabled = true;
-                    btn.textContent = 'Ответ отправлен ❤️';
-                    statusEl.textContent = 'Доставлено! Ответ теперь виден здесь ❤️';
+                fetch(DB.base + '/replies/' + entry.id + '.json', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: text, date: new Date().toISOString() })
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (j) {
+                    if (j && j.name) {
+                        try { localStorage.setItem(repliedKey(entry.id), '1'); } catch (e) {}
+                        area.value = '';
+                        area.disabled = true;
+                        btn.textContent = 'Ответ отправлен ❤️';
+                        statusEl.textContent = 'Доставлено! Ответ теперь виден здесь ❤️';
+                        loadAnswers(entry, currentAnswersBox === answersBox2 ? answersBox2 : answersBox);
+                    } else {
+                        btn.disabled = false;
+                        statusEl.textContent = 'Не отправилось, попробуй ещё раз 😔';
+                    }
                 })
                 .catch(function () {
                     btn.disabled = false;
                     statusEl.textContent = 'Нет связи, попробуй ещё раз 😔';
                 });
             }
-            /* Подписка на ответы: показывает все ответы на это сообщение вживую */
-            function listenAnswers(entry, box) {
-                stopAnswers();
+            /* Ответы: читаем из базы при открытии + обновляем каждые 15 сек */
+            function renderAnswerList(box, data) {
                 box.innerHTML = '';
-                if (!DB || !entry || !entry.reply || !entry.id) return;
-                var ref = DB.ref('replies/' + entry.id).orderByKey().limitToLast(20);
-                var cb = function (snap) {
-                    box.innerHTML = '';
-                    snap.forEach(function (ch) {
-                        var v = ch.val() || {};
-                        if (!v.text) return;
-                        var d = document.createElement('div');
-                        d.className = 'answer';
-                        d.textContent = v.text;
-                        var s = document.createElement('small');
-                        try { s.textContent = new Date(v.date).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch (e) { s.textContent = ''; }
-                        d.appendChild(s);
-                        box.appendChild(d);
-                    });
-                };
-                ref.on('value', cb);
-                answersOff = function () { try { ref.off('value', cb); } catch (e) {} };
+                if (!data) return;
+                Object.keys(data).sort().forEach(function (k) {
+                    var v = data[k] || {};
+                    if (!v.text) return;
+                    var d = document.createElement('div');
+                    d.className = 'answer';
+                    d.textContent = v.text;
+                    var s = document.createElement('small');
+                    try { s.textContent = new Date(v.date).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch (e) { s.textContent = ''; }
+                    d.appendChild(s);
+                    box.appendChild(d);
+                });
             }
+            function loadAnswers(entry, box) {
+                box.innerHTML = '';
+                currentAnswersEntry = entry;
+                currentAnswersBox = box;
+                if (!DB || !entry || !entry.reply || !entry.id) { stopAnswers(); return; }
+                fetch(DB.base + '/replies/' + entry.id + '.json', { cache: 'no-store' })
+                    .then(function (r) { return r.ok ? r.json() : null; })
+                    .then(function (data) {
+                        if (currentAnswersEntry !== entry || currentAnswersBox !== box) return;
+                        renderAnswerList(box, data);
+                    })
+                    .catch(function () {});
+            }
+            function listenAnswers(entry, box) { loadAnswers(entry, box); }
             replySend.addEventListener('click', function () { if (currentEntry) sendReply(currentEntry, replyArea, replySend, replyStatus); });
             replySend2.addEventListener('click', function () { if (currentMini) sendReply(currentMini, replyArea2, replySend2, replyStatus2); });
             var inboxBtn = document.getElementById('inbox-btn');
@@ -1338,6 +1338,8 @@
                             if (top) showNews(top);
                         }
                         renderInbox();
+                        if (modal.classList.contains('show') && currentEntry) loadAnswers(currentEntry, answersBox);
+                        else if (miniLetter.classList.contains('show') && currentMini) loadAnswers(currentMini, answersBox2);
                     })
                     .catch(function () {});
             }
