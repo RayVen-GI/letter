@@ -1190,9 +1190,9 @@
                     .catch(function () {});
             }
             function listenAnswers(entry, box) { loadAnswers(entry, box); }
-            replySend.addEventListener('click', function () { if (currentEntry) sendReply(currentEntry, replyArea, replySend, replyStatus); });
-            replySend2.addEventListener('click', function () { if (currentMini) sendReply(currentMini, replyArea2, replySend2, replyStatus2); });
-            replySend3.addEventListener('click', function () { if (currentEntry) sendReply(currentEntry, replyArea3, replySend3, replyStatus3); });
+            replySend.addEventListener('click', function () { if (currentEntry) sendReply(currentEntry, replyArea, replySend, replyStatus); else replyStatus.textContent = 'Обнови страницу и попробуй ещё раз 😔'; });
+            replySend2.addEventListener('click', function () { if (currentMini) sendReply(currentMini, replyArea2, replySend2, replyStatus2); else replyStatus2.textContent = 'Обнови страницу и попробуй ещё раз 😔'; });
+            replySend3.addEventListener('click', function () { if (currentEntry) sendReply(currentEntry, replyArea3, replySend3, replyStatus3); else replyStatus3.textContent = 'Обнови страницу и попробуй ещё раз 😔'; });
             var inboxBtn = document.getElementById('inbox-btn');
             var inboxBadge = document.getElementById('inbox-badge');
             var inboxModal = document.getElementById('inbox-modal');
@@ -1321,6 +1321,7 @@
 
             function openMini(entry) {
                 if (!entry || !entry.miniText) return;
+                currentMini = entry;
                 miniLetterTitle.textContent = entry.title || '💌 Мини-письмо';
                 miniLetterText.textContent = entry.miniText;
                 modal.classList.remove('show');
