@@ -1252,18 +1252,6 @@
                 })();
             }
         }
-        /* Праздник при первом появлении мини-письма (1 раз на это письмо) */
-        function celebrateFirstTime(entry) {
-            if (!entry || !entry.id) return;
-            var flag = 'letter_celebrated_' + entry.id;
-            var done = false;
-            try { done = localStorage.getItem(flag) === '1'; } catch (e) {}
-            if (done) return;
-            try { localStorage.setItem(flag, '1'); } catch (e) {}
-            setTimeout(function () {
-                celebrateBurst(window.innerWidth / 2, window.innerHeight / 2);
-            }, 220);
-        }
 
         // Фон летит только при открытом письме (createHeart сам проверяет флаг isOpen)
         setInterval(createHeart, 350);
@@ -1547,9 +1535,21 @@
                 updateBadge();
             }
 
+            /* Праздник при первом НАЖАТИИ на «Открыть мини-письмо» (1 раз на это письмо) */
+            function celebrateFirstTime(entry) {
+                if (!entry || !entry.id) return;
+                var flag = 'letter_celebrated_' + entry.id;
+                var done = false;
+                try { done = localStorage.getItem(flag) === '1'; } catch (e) {}
+                if (done) return;
+                try { localStorage.setItem(flag, '1'); } catch (e) {}
+                celebrateBurst(window.innerWidth / 2, window.innerHeight / 2);
+            }
+
             function openMini(entry) {
                 if (!entry || !entry.miniText) return;
                 currentMini = entry;
+                celebrateFirstTime(entry);
                 miniLetterTitle.textContent = entry.title || '💌 Мини-письмо';
                 miniLetterText.textContent = entry.miniText;
                 modal.classList.remove('show');
@@ -1579,7 +1579,6 @@
                 listenAnswers(entry, answersBox);
                 banner.classList.add('show');
                 modal.classList.add('show');
-                if (hasMini) celebrateFirstTime(entry);
                 // Локальное системное уведомление, если разрешение уже дано и вкладка открыта
                 try {
                     if ('Notification' in window && Notification.permission === 'granted') {
@@ -1635,6 +1634,7 @@
                 if (!entry) return;
                 currentEntry = entry;
                 currentMini = entry.miniText ? entry : null;
+                if (entry.miniText) celebrateFirstTime(entry);
                 readerTitle.textContent = entry.title || '💌 Сообщение';
                 readerBody.textContent = entry.miniText || entry.text || '';
                 inboxModal.classList.remove('show');
