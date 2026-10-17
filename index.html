@@ -1253,9 +1253,9 @@
             }
         }
 
-        /* 🔧 Отладка эффекта: открывай сайт с параметром ?fx=1 —
-           сбросит все «уже показанные» письма и сразу покажет праздник.
-           ?fx=11 — только для письма с id 11. */
+        /* 🔧 Отладка (только для проверки):
+           ?fx=1  — сбросить «прочитано» и эффекты, чтобы уведомление пришло заново;
+           ?burst=1 — показать только эффект открытия, без уведомления. */
         function resetCelebrations(onlyId) {
             var keys = [];
             try {
@@ -1272,18 +1272,23 @@
             return n;
         }
         (function () {
-            var fx = null;
-            try { fx = new URLSearchParams(location.search).get('fx'); } catch (e) { return; }
-            if (fx === null) return;
-            var cleared = resetCelebrations(fx === '1' ? null : fx);
-            if (fx !== '0') {
+            var q;
+            try { q = new URLSearchParams(location.search); } catch (e) { return; }
+            var fx = q.get('fx');
+            var burst = q.get('burst');
+            if (fx !== null) {
+                resetCelebrations(fx === '1' ? null : fx);
+                try {
+                    localStorage.removeItem('letter_seen_id');
+                    localStorage.removeItem('letter_local_log');
+                } catch (e) {}
+                // перезагружаем без этого параметра, чтобы уведомление показалось заново
+                location.replace(location.pathname + '?v=' + Date.now());
+                return;
+            }
+            if (burst !== null && burst !== '0') {
                 setTimeout(function () { celebrateBurst(window.innerWidth / 2, window.innerHeight / 2); }, 300);
             }
-            var tip = document.createElement('div');
-            tip.textContent = cleared ? 'Эффект сброшен: ' + cleared : 'Нечего было сбрасывать';
-            tip.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:600;background:#fff;border:2px solid #ff8fab;color:#c9184a;padding:10px 18px;border-radius:20px;font:600 15px Segoe UI,sans-serif;box-shadow:0 8px 22px rgba(201,24,74,.3)';
-            document.body.appendChild(tip);
-            setTimeout(function () { if (tip.parentNode) tip.parentNode.removeChild(tip); }, 2600);
         })();
 
         // Фон летит только при открытом письме (createHeart сам проверяет флаг isOpen)
