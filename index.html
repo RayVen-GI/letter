@@ -752,6 +752,37 @@
             word-break: break-word;
         }
         .answer small { display: block; color: #b5838d; font-size: 12px; margin-top: 2px; }
+        /* 🎉 Эффект открытия письма: разлетающиеся сердечки, цветочки и искры */
+        .celebrate-emoji {
+            position: fixed;
+            pointer-events: none;
+            z-index: 500;
+            will-change: transform, opacity;
+        }
+        .celebrate-burst {
+            position: fixed;
+            pointer-events: none;
+            z-index: 500;
+            border-radius: 50%;
+            animation: celebrateAnim 1s ease-out forwards;
+        }
+        @keyframes celebrateAnim {
+            0% { transform: translate(0, 0) scale(1); opacity: 1; }
+            100% { transform: translate(var(--dx), var(--dy)) scale(0); opacity: 0; }
+        }
+        .celebrate-fall {
+            position: fixed;
+            pointer-events: none;
+            z-index: 500;
+            animation: celebrateFall linear forwards;
+            will-change: transform, opacity;
+        }
+        @keyframes celebrateFall {
+            0% { transform: translate(0, -12vh) rotate(0deg); opacity: 0; }
+            10% { opacity: 0.95; }
+            85% { opacity: 0.7; }
+            100% { transform: translate(var(--sway), 108vh) rotate(var(--rot)); opacity: 0; }
+        }
         /* ✉️ Инбокс: кнопка с бейджем + список всех уведомлений */
         #inbox-btn {
             position: fixed;
@@ -1157,6 +1188,83 @@
             }
         }
 
+        /* 🎉 Эффект открытия письма: из центра экрана вылетают сердечки, цветочки и искры */
+        var CELEBRATE_EMOJIS = ['💖', '💕', '💗', '💘', '🌸', '🌺', '🌷', '💐', '✨', '💞'];
+        function celebrateBurst(cx, cy) {
+            // Искры
+            var colors = ['#ffb3c1', '#ff758f', '#ff5c8a', '#e63946', '#ffc2d1', '#fff0f3'];
+            for (var i = 0; i < 36; i++) {
+                (function () {
+                    var s = document.createElement('div');
+                    s.className = 'celebrate-burst';
+                    var angle = (Math.PI * 2 * i) / 36 + (Math.random() - 0.5) * 0.4;
+                    var dist = Math.random() * 190 + 90;
+                    s.style.left = cx + 'px';
+                    s.style.top = cy + 'px';
+                    s.style.setProperty('--dx', (Math.cos(angle) * dist) + 'px');
+                    s.style.setProperty('--dy', (Math.sin(angle) * dist) + 'px');
+                    s.style.background = colors[Math.floor(Math.random() * colors.length)];
+                    var sz = Math.random() * 7 + 4;
+                    s.style.width = sz + 'px';
+                    s.style.height = sz + 'px';
+                    document.body.appendChild(s);
+                    setTimeout(function () { if (s.parentNode) s.parentNode.removeChild(s); }, 1000);
+                })();
+            }
+            // Эмодзи веером вверх-в стороны
+            for (var j = 0; j < 26; j++) {
+                (function (i) {
+                    var e = document.createElement('div');
+                    e.className = 'celebrate-emoji';
+                    e.textContent = CELEBRATE_EMOJIS[Math.floor(Math.random() * CELEBRATE_EMOJIS.length)];
+                    e.style.left = cx + 'px';
+                    e.style.top = cy + 'px';
+                    e.style.fontSize = (Math.random() * 20 + 18) + 'px';
+                    var angle = -Math.PI / 2 + (Math.random() - 0.5) * 2.4;
+                    var dist = Math.random() * 260 + 120;
+                    e.style.transition = 'transform 1.5s cubic-bezier(.2,.8,.3,1), opacity 1.5s ease';
+                    e.style.transform = 'translate(' + (Math.cos(angle) * dist) + 'px,' + (Math.sin(angle) * dist) + 'px) scale(1.4) rotate(' + ((Math.random() - 0.5) * 160) + 'deg)';
+                    e.style.opacity = '0';
+                    document.body.appendChild(e);
+                    requestAnimationFrame(function () {
+                        if (!e.parentNode) return;
+                        e.style.opacity = '1';
+                        setTimeout(function () { e.style.opacity = '0'; }, 420);
+                    });
+                    setTimeout(function () { if (e.parentNode) e.parentNode.removeChild(e); }, 1800);
+                })(j);
+            }
+            // Цветочки и сердечки осыпаются сверху
+            for (var k = 0; k < 16; k++) {
+                (function () {
+                    var f = document.createElement('div');
+                    f.className = 'celebrate-fall';
+                    f.textContent = CELEBRATE_EMOJIS[Math.floor(Math.random() * CELEBRATE_EMOJIS.length)];
+                    f.style.left = (Math.random() * 96) + 'vw';
+                    f.style.fontSize = (Math.random() * 18 + 16) + 'px';
+                    var dur = Math.random() * 3 + 3.5;
+                    f.style.animationDuration = dur + 's';
+                    f.style.animationDelay = (Math.random() * 1.2) + 's';
+                    f.style.setProperty('--sway', ((Math.random() - 0.5) * 120) + 'px');
+                    f.style.setProperty('--rot', ((Math.random() - 0.5) * 300) + 'deg');
+                    document.body.appendChild(f);
+                    setTimeout(function () { if (f.parentNode) f.parentNode.removeChild(f); }, (dur + 2) * 1000);
+                })();
+            }
+        }
+        /* Праздник при первом появлении мини-письма (1 раз на это письмо) */
+        function celebrateFirstTime(entry) {
+            if (!entry || !entry.id) return;
+            var flag = 'letter_celebrated_' + entry.id;
+            var done = false;
+            try { done = localStorage.getItem(flag) === '1'; } catch (e) {}
+            if (done) return;
+            try { localStorage.setItem(flag, '1'); } catch (e) {}
+            setTimeout(function () {
+                celebrateBurst(window.innerWidth / 2, window.innerHeight / 2);
+            }, 220);
+        }
+
         // Фон летит только при открытом письме (createHeart сам проверяет флаг isOpen)
         setInterval(createHeart, 350);
 
@@ -1471,6 +1579,7 @@
                 listenAnswers(entry, answersBox);
                 banner.classList.add('show');
                 modal.classList.add('show');
+                if (hasMini) celebrateFirstTime(entry);
                 // Локальное системное уведомление, если разрешение уже дано и вкладка открыта
                 try {
                     if ('Notification' in window && Notification.permission === 'granted') {
